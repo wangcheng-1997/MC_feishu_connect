@@ -175,7 +175,7 @@ class SqlServerClient {
     try {
       const query = `
         SELECT 
-          TABLE_SCHEMA AS schema,
+          TABLE_SCHEMA AS tableSchema,
           TABLE_NAME AS name
         FROM INFORMATION_SCHEMA.TABLES
         WHERE TABLE_TYPE = 'BASE TABLE'
