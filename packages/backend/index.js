@@ -5,6 +5,12 @@ const fs = require("fs");
 const DataSourceFactory = require("./data_source_factory.js");
 const cacheManager = require("./cache_manager.js");
 const { judgeEncryptSignValid } = require("./request_sign.js");
+const { getTableMeta } = require("./table_meta.js");
+const { getTableRecords } = require("./table_records.js");
+const {
+    getSqlServerTableMeta,
+    getSqlServerTableRecords,
+} = require("./sqlserver_handler.js");
 
 const app = express();
 
