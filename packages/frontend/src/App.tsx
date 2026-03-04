@@ -21,9 +21,6 @@ const { TextArea } = Input;
 // 数据源类型
 type DataSourceType = "maxcompute" | "sqlserver";
 
-// 同步频率类型
-type SyncFrequencyType = "manual" | "minute" | "hour" | "day";
-
 // MaxCompute 配置接口
 interface MaxComputeConfig {
     accessId: string;
@@ -51,12 +48,6 @@ interface SqlServerConfig {
     limit: number;
     encrypt: boolean;
     trustServerCertificate: boolean;
-}
-
-// 同步频率配置
-interface SyncFrequency {
-    type: SyncFrequencyType;
-    interval: number;
 }
 
 const ENDPOINT_OPTIONS = [
@@ -118,22 +109,14 @@ const ENDPOINT_OPTIONS = [
     },
 ];
 
-const SYNC_FREQUENCY_OPTIONS = [
-    { value: "manual", label: "手动同步" },
-    { value: "minute", label: "按分钟" },
-    { value: "hour", label: "按小时" },
-    { value: "day", label: "按天" },
-];
+
 
 export default function App() {
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
     const [userId, setUserId] = useState("");
     const [tenantKey, setTenantKey] = useState("");
-    const [dataSourceType, setDataSourceType] =
-        useState<DataSourceType>("maxcompute");
-    const [syncFrequencyType, setSyncFrequencyType] =
-        useState<SyncFrequencyType>("manual");
+    const [dataSourceType, setDataSourceType] = useState<DataSourceType>("maxcompute");
 
     useEffect(() => {
         // 加载已保存的配置
@@ -145,13 +128,6 @@ export default function App() {
             } else if (config?.sqlserver) {
                 setDataSourceType("sqlserver");
                 form.setFieldsValue(config.sqlserver);
-            }
-            if (config?.syncFrequency) {
-                setSyncFrequencyType(config.syncFrequency.type);
-                form.setFieldsValue({
-                    syncFrequencyType: config.syncFrequency.type,
-                    syncInterval: config.syncFrequency.interval,
-                });
             }
         });
 
@@ -172,59 +148,14 @@ export default function App() {
         form.resetFields();
     };
 
-    const handleSyncFrequencyChange = (value: SyncFrequencyType) => {
-        setSyncFrequencyType(value);
-    };
 
-    const getSyncIntervalLabel = () => {
-        switch (syncFrequencyType) {
-            case "minute":
-                return "分钟";
-            case "hour":
-                return "小时";
-            case "day":
-                return "天";
-            default:
-                return "";
-        }
-    };
 
-    const getSyncIntervalMin = () => {
-        switch (syncFrequencyType) {
-            case "minute":
-                return 1;
-            case "hour":
-                return 1;
-            case "day":
-                return 1;
-            default:
-                return 1;
-        }
-    };
 
-    const getSyncIntervalMax = () => {
-        switch (syncFrequencyType) {
-            case "minute":
-                return 59;
-            case "hour":
-                return 23;
-            case "day":
-                return 30;
-            default:
-                return 1;
-        }
-    };
 
     const handleSaveConfig = async (values: any) => {
         setLoading(true);
         try {
             let config: any = {};
-
-            // 构建同步频率配置
-            const syncFrequency: SyncFrequency = {
-                type: values.syncFrequencyType || "manual",
-                interval: values.syncInterval || 1,
-            };
 
             if (dataSourceType === "maxcompute") {
                 config = {
@@ -239,7 +170,6 @@ export default function App() {
                         sql: values.sql || "",
                         limit: values.limit || 1000,
                     },
-                    syncFrequency,
                 };
             } else {
                 config = {
@@ -255,10 +185,8 @@ export default function App() {
                         sql: values.sql || "",
                         limit: values.limit || 1000,
                         encrypt: values.encrypt !== false,
-                        trustServerCertificate:
-                            values.trustServerCertificate === true,
+                        trustServerCertificate: values.trustServerCertificate === true,
                     },
-                    syncFrequency,
                 };
             }
 
@@ -276,6 +204,9 @@ export default function App() {
     };
 
     const [testingConnection, setTestingConnection] = useState(false);
+    const [loadingTables, setLoadingTables] = useState(false);
+    const [tables, setTables] = useState<any[]>([]);
+    const [tableSearchValue, setTableSearchValue] = useState('');
 
     const handleTestConnection = async () => {
         try {
@@ -322,6 +253,8 @@ export default function App() {
 
             if (result.code === 0 && result.data?.success) {
                 message.success(result.message || "连接成功！");
+                // 连接成功后自动获取表列表
+                handleGetTables();
             } else {
                 message.error(result.message || "连接失败");
             }
@@ -330,6 +263,62 @@ export default function App() {
             message.error("连接测试失败，请检查网络或后端服务是否启动");
         } finally {
             setTestingConnection(false);
+        }
+    };
+
+    const handleGetTables = async () => {
+        try {
+            const values = await form.validateFields();
+            setLoadingTables(true);
+            
+            // 后端服务地址，使用相对路径（部署时自动适应）
+            const baseUrl = '';
+            let tablesUrl = '';
+            let requestBody = {};
+            
+            if (dataSourceType === "maxcompute") {
+                tablesUrl = `${baseUrl}/api/maxcompute_tables`;
+                requestBody = {
+                    accessId: values.accessId,
+                    accessKey: values.accessKey,
+                    endpoint: values.endpoint,
+                    projectName: values.projectName,
+                    schemaName: values.schemaName || "default",
+                };
+            } else {
+                tablesUrl = `${baseUrl}/api/sqlserver_tables`;
+                requestBody = {
+                    server: values.server,
+                    port: parseInt(values.port, 10) || 1433,
+                    database: values.database,
+                    user: values.user,
+                    password: values.password,
+                    encrypt: values.encrypt !== false,
+                    trustServerCertificate: values.trustServerCertificate === true,
+                };
+            }
+            
+            const response = await fetch(tablesUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(requestBody),
+            });
+            
+            const result = await response.json();
+            
+            if (result.code === 0 && result.data) {
+                setTables(result.data);
+                message.success(`成功获取 ${result.data.length} 个表`);
+            } else {
+                message.error(result.message || "获取表列表失败");
+            }
+        } catch (error) {
+            console.error("获取表列表失败:", error);
+            message.error("获取表列表失败，请检查网络或后端服务是否启动");
+        } finally {
+            setLoadingTables(false);
         }
     };
 
@@ -366,10 +355,6 @@ export default function App() {
                     layout="vertical"
                     onFinish={handleSaveConfig}
                     autoComplete="off"
-                    initialValues={{
-                        syncFrequencyType: "manual",
-                        syncInterval: 1,
-                    }}
                 >
                     {dataSourceType === "maxcompute" ? (
                         <>
@@ -548,10 +533,26 @@ export default function App() {
                     <Form.Item
                         label="表名"
                         name="tableName"
-                        rules={[{ required: true, message: "请输入表名" }]}
+                        rules={[{ required: true, message: "请选择表名" }]}
                         tooltip="要同步的表名"
                     >
-                        <Input placeholder="请输入表名" />
+                        <Select
+                            showSearch
+                            placeholder="请搜索并选择表名"
+                            loading={loadingTables}
+                            filterOption={(input, option) =>
+                                (option?.children as string)
+                                    .toLowerCase()
+                                    .includes(input.toLowerCase())
+                            }
+                            onFocus={handleGetTables}
+                        >
+                            {tables.map((table) => (
+                                <Select.Option key={table.name} value={table.name}>
+                                    {table.name}
+                                </Select.Option>
+                            ))}
+                        </Select>
                     </Form.Item>
 
                     <Form.Item
@@ -562,47 +563,7 @@ export default function App() {
                         <Input placeholder="可选，默认为第一个字段或自动识别" />
                     </Form.Item>
 
-                    <Divider />
 
-                    {/* 同步频率设置 */}
-                    <Title level={5}>同步频率设置</Title>
-
-                    <Form.Item
-                        label="同步方式"
-                        name="syncFrequencyType"
-                        tooltip="选择数据同步的频率"
-                    >
-                        <Select
-                            options={SYNC_FREQUENCY_OPTIONS}
-                            placeholder="请选择同步频率"
-                            onChange={handleSyncFrequencyChange}
-                        />
-                    </Form.Item>
-
-                    {syncFrequencyType !== "manual" && (
-                        <Form.Item
-                            label={`同步间隔 (${getSyncIntervalLabel()})`}
-                            name="syncInterval"
-                            tooltip={`每多少${getSyncIntervalLabel()}同步一次`}
-                            rules={[
-                                { required: true, message: "请输入同步间隔" },
-                                {
-                                    type: "number",
-                                    min: getSyncIntervalMin(),
-                                    max: getSyncIntervalMax(),
-                                    message: `范围 ${getSyncIntervalMin()}-${getSyncIntervalMax()}`,
-                                },
-                            ]}
-                            initialValue={1}
-                        >
-                            <InputNumber
-                                min={getSyncIntervalMin()}
-                                max={getSyncIntervalMax()}
-                                style={{ width: "100%" }}
-                                placeholder={`请输入间隔${getSyncIntervalLabel()}数`}
-                            />
-                        </Form.Item>
-                    )}
 
                     <Divider />
 
@@ -621,9 +582,9 @@ export default function App() {
                     </Form.Item>
 
                     <Form.Item
-                        label="单次同步记录数"
+                        label="批量处理记录数"
                         name="limit"
-                        tooltip="每次同步获取的最大记录数"
+                        tooltip="每次批量处理的最大记录数，系统会自动处理所有数据"
                         initialValue={1000}
                     >
                         <Input type="number" placeholder="1000" />

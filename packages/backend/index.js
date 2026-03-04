@@ -304,6 +304,32 @@ app.post("/api/sqlserver_tables", async (req, res) => {
     }
 });
 
+/**
+ * 获取 MaxCompute 表列表接口
+ */
+app.post("/api/maxcompute_tables", async (req, res) => {
+    console.log("maxcompute_tables 的请求数据", req.body);
+
+    try {
+        const { MaxComputeClient } = require("./maxcompute_client.js");
+        const client = new MaxComputeClient(req.body);
+        const tables = await client.getTables();
+
+        res.status(200).json({
+            code: 0,
+            message: "获取表列表成功",
+            data: tables,
+        });
+    } catch (error) {
+        console.error("获取 MaxCompute 表列表失败:", error);
+        res.status(500).json({
+            code: 500,
+            message: "获取表列表失败: " + error.message,
+            data: null,
+        });
+    }
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Data Sync Server running on port ${PORT}`);

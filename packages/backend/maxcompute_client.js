@@ -152,6 +152,35 @@ class MaxComputeClient {
   }
 
   /**
+   * 获取表列表
+   */
+  async getTables() {
+    try {
+      // 通过 SQL 查询获取表列表
+      const sql = `SHOW TABLES IN ${this.schemaName}`;
+      const result = await this.executeSQL(sql);
+      
+      // 解析结果
+      const tables = [];
+      if (result && result.Rows) {
+        result.Rows.forEach(row => {
+          if (row && row.length > 0) {
+            tables.push({
+              name: row[0],
+              schema: this.schemaName
+            });
+          }
+        });
+      }
+      
+      return tables;
+    } catch (error) {
+      console.error('获取表列表失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
    * 测试连接
    * 尝试获取项目信息来验证连接
    */
