@@ -34,11 +34,6 @@ yarn-error.log*
 # Testing
 coverage/
 
-# Replit
-.replit
-.local/
-.config/
-
 # Misc
 *.pem
 .cache/
