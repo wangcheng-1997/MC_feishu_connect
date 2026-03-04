@@ -215,32 +215,14 @@ export default function App() {
             
             // 后端服务地址，使用相对路径（部署时自动适应）
             const baseUrl = '';
-            let testUrl = '';
-            let requestBody = {};
-
-            if (dataSourceType === "maxcompute") {
-                testUrl = `${baseUrl}/api/test_connection`;
-                requestBody = {
-                    accessId: values.accessId,
-                    accessKey: values.accessKey,
-                    endpoint: values.endpoint,
-                    projectName: values.projectName,
-                    schemaName: values.schemaName || "default",
-                };
-            } else {
-                testUrl = `${baseUrl}/api/test_sqlserver_connection`;
-                requestBody = {
-                    server: values.server,
-                    port: parseInt(values.port, 10) || 1433,
-                    database: values.database,
-                    user: values.user,
-                    password: values.password,
-                    encrypt: values.encrypt !== false,
-                    trustServerCertificate:
-                        values.trustServerCertificate === true,
-                };
-            }
-
+            const testUrl = `${baseUrl}/api/test_connection`;
+            
+            // 构建请求体，包含数据源类型
+            const requestBody = {
+                dataSourceType,
+                ...values
+            };
+            
             const response = await fetch(testUrl, {
                 method: "POST",
                 headers: {
@@ -248,9 +230,13 @@ export default function App() {
                 },
                 body: JSON.stringify(requestBody),
             });
-
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
             const result = await response.json();
-
+            
             if (result.code === 0 && result.data?.success) {
                 message.success(result.message || "连接成功！");
                 // 连接成功后自动获取表列表
@@ -260,7 +246,7 @@ export default function App() {
             }
         } catch (error) {
             console.error("连接测试失败:", error);
-            message.error("连接测试失败，请检查网络或后端服务是否启动");
+            message.error(`连接测试失败: ${error.message || '网络或服务异常'}`);
         } finally {
             setTestingConnection(false);
         }
@@ -273,30 +259,13 @@ export default function App() {
             
             // 后端服务地址，使用相对路径（部署时自动适应）
             const baseUrl = '';
-            let tablesUrl = '';
-            let requestBody = {};
+            const tablesUrl = `${baseUrl}/api/tables`;
             
-            if (dataSourceType === "maxcompute") {
-                tablesUrl = `${baseUrl}/api/maxcompute_tables`;
-                requestBody = {
-                    accessId: values.accessId,
-                    accessKey: values.accessKey,
-                    endpoint: values.endpoint,
-                    projectName: values.projectName,
-                    schemaName: values.schemaName || "default",
-                };
-            } else {
-                tablesUrl = `${baseUrl}/api/sqlserver_tables`;
-                requestBody = {
-                    server: values.server,
-                    port: parseInt(values.port, 10) || 1433,
-                    database: values.database,
-                    user: values.user,
-                    password: values.password,
-                    encrypt: values.encrypt !== false,
-                    trustServerCertificate: values.trustServerCertificate === true,
-                };
-            }
+            // 构建请求体，包含数据源类型
+            const requestBody = {
+                dataSourceType,
+                ...values
+            };
             
             const response = await fetch(tablesUrl, {
                 method: "POST",
@@ -305,6 +274,10 @@ export default function App() {
                 },
                 body: JSON.stringify(requestBody),
             });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
             
             const result = await response.json();
             
@@ -316,7 +289,7 @@ export default function App() {
             }
         } catch (error) {
             console.error("获取表列表失败:", error);
-            message.error("获取表列表失败，请检查网络或后端服务是否启动");
+            message.error(`获取表列表失败: ${error.message || '网络或服务异常'}`);
         } finally {
             setLoadingTables(false);
         }

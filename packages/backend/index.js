@@ -2,12 +2,8 @@ const express = require("express");
 const path = require("path");
 const fs = require("fs");
 
-const { getTableMeta } = require("./table_meta.js");
-const { getTableRecords } = require("./table_records.js");
-const {
-    getSqlServerTableMeta,
-    getSqlServerTableRecords,
-} = require("./sqlserver_handler.js");
+const DataSourceFactory = require("./data_source_factory.js");
+const cacheManager = require("./cache_manager.js");
 const { judgeEncryptSignValid } = require("./request_sign.js");
 
 const app = express();
@@ -225,15 +221,19 @@ app.get("/health", (req, res) => {
 });
 
 /**
- * 测试 MaxCompute 连接接口
+ * 测试连接接口
+ * 支持 MaxCompute 和 SQL Server
  */
 app.post("/api/test_connection", async (req, res) => {
     console.log("test_connection 的请求数据", req.body);
 
     try {
-        const { MaxComputeClient } = require("./maxcompute_client.js");
-        const client = new MaxComputeClient(req.body);
-        const result = await client.testConnection();
+        // 创建数据源实例
+        const dataSource = await DataSourceFactory.createDataSource({ 
+            [req.body.dataSourceType]: req.body 
+        });
+        const result = await dataSource.testConnection();
+        await dataSource.close();
 
         res.status(200).json({
             code: result.success ? 0 : 500,
@@ -241,7 +241,7 @@ app.post("/api/test_connection", async (req, res) => {
             data: result,
         });
     } catch (error) {
-        console.error("MaxCompute 连接测试失败:", error);
+        console.error("连接测试失败:", error);
         res.status(500).json({
             code: 500,
             message: "连接测试失败: " + error.message,
@@ -250,17 +250,18 @@ app.post("/api/test_connection", async (req, res) => {
     }
 });
 
+
+
 /**
- * 测试 SQL Server 连接接口
+ * 测试 SQL Server 连接接口（兼容旧版本）
  */
 app.post("/api/test_sqlserver_connection", async (req, res) => {
     console.log("test_sqlserver_connection 的请求数据", req.body);
 
     try {
-        const { SqlServerClient } = require("./sqlserver_client.js");
-        const client = new SqlServerClient(req.body);
-        const result = await client.testConnection();
-        await client.close();
+        const dataSource = await DataSourceFactory.createDataSource({ sqlserver: req.body });
+        const result = await dataSource.testConnection();
+        await dataSource.close();
 
         res.status(200).json({
             code: result.success ? 0 : 500,
@@ -278,16 +279,73 @@ app.post("/api/test_sqlserver_connection", async (req, res) => {
 });
 
 /**
- * 获取 SQL Server 表列表接口
+ * 获取表列表接口
+ * 支持 MaxCompute 和 SQL Server
+ */
+app.post("/api/tables", async (req, res) => {
+    console.log("tables 的请求数据", req.body);
+
+    try {
+        // 尝试从缓存获取
+        const cachedTables = cacheManager.getCachedTables(req.body);
+        if (cachedTables) {
+            console.log("从缓存获取表列表");
+            return res.status(200).json({
+                code: 0,
+                message: "获取表列表成功（缓存）",
+                data: cachedTables,
+            });
+        }
+
+        // 创建数据源实例
+        const dataSource = await DataSourceFactory.createDataSource({ 
+            [req.body.dataSourceType]: req.body 
+        });
+        const tables = await dataSource.getTables();
+        await dataSource.close();
+
+        // 缓存结果
+        cacheManager.cacheTables(req.body, tables);
+
+        res.status(200).json({
+            code: 0,
+            message: "获取表列表成功",
+            data: tables,
+        });
+    } catch (error) {
+        console.error("获取表列表失败:", error);
+        res.status(500).json({
+            code: 500,
+            message: "获取表列表失败: " + error.message,
+            data: null,
+        });
+    }
+});
+
+/**
+ * 获取 SQL Server 表列表接口（兼容旧版本）
  */
 app.post("/api/sqlserver_tables", async (req, res) => {
     console.log("sqlserver_tables 的请求数据", req.body);
 
     try {
-        const { SqlServerClient } = require("./sqlserver_client.js");
-        const client = new SqlServerClient(req.body);
-        const tables = await client.getTables();
-        await client.close();
+        // 尝试从缓存获取
+        const cachedTables = cacheManager.getCachedTables(req.body);
+        if (cachedTables) {
+            console.log("从缓存获取表列表");
+            return res.status(200).json({
+                code: 0,
+                message: "获取表列表成功（缓存）",
+                data: cachedTables,
+            });
+        }
+
+        const dataSource = await DataSourceFactory.createDataSource({ sqlserver: req.body });
+        const tables = await dataSource.getTables();
+        await dataSource.close();
+
+        // 缓存结果
+        cacheManager.cacheTables(req.body, tables);
 
         res.status(200).json({
             code: 0,
@@ -305,15 +363,29 @@ app.post("/api/sqlserver_tables", async (req, res) => {
 });
 
 /**
- * 获取 MaxCompute 表列表接口
+ * 获取 MaxCompute 表列表接口（兼容旧版本）
  */
 app.post("/api/maxcompute_tables", async (req, res) => {
     console.log("maxcompute_tables 的请求数据", req.body);
 
     try {
-        const { MaxComputeClient } = require("./maxcompute_client.js");
-        const client = new MaxComputeClient(req.body);
-        const tables = await client.getTables();
+        // 尝试从缓存获取
+        const cachedTables = cacheManager.getCachedTables(req.body);
+        if (cachedTables) {
+            console.log("从缓存获取表列表");
+            return res.status(200).json({
+                code: 0,
+                message: "获取表列表成功（缓存）",
+                data: cachedTables,
+            });
+        }
+
+        const dataSource = await DataSourceFactory.createDataSource({ maxcompute: req.body });
+        const tables = await dataSource.getTables();
+        await dataSource.close();
+
+        // 缓存结果
+        cacheManager.cacheTables(req.body, tables);
 
         res.status(200).json({
             code: 0,
