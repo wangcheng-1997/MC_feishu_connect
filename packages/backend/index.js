@@ -33,12 +33,21 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-app.get("/", (req, res) => {
-    res.send("Data Sync Connector (MaxCompute & SQL Server) - Running");
-});
-
 // 静态文件服务
 app.use(express.static(path.join(__dirname, "../frontend/dist")));
+
+app.get("*", (req, res, next) => {
+    // 如果是 API 请求，跳过
+    if (req.path.startsWith("/api") || req.path === "/health" || req.path === "/meta.json") {
+        return next();
+    }
+    const indexPath = path.join(__dirname, "../frontend/dist/index.html");
+    if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+    } else {
+        res.send("Data Sync Connector (MaxCompute & SQL Server) - Running (Frontend not built yet)");
+    }
+});
 
 app.get("/meta.json", (req, res) => {
     fs.readFile(
