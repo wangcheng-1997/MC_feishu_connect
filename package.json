@@ -11,9 +11,7 @@
     "dev:backend": "node packages/backend/index.js",
     "build": "npm run build --workspace=packages/frontend",
     "start": "node packages/backend/index.js",
-    "install:all": "npm install --workspaces",
-    "deploy": "npm run install:all && npm run build && npm start",
-    "prepare": "npm run install:all"
+    "deploy": "npm run build && npm start"
   },
   "keywords": [
     "feishu",
