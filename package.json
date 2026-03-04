@@ -1,0 +1,27 @@
+{
+  "name": "mc-feishu-connect",
+  "version": "1.0.0",
+  "description": "飞书连接器 - MaxCompute & SQL Server 数据同步",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:frontend": "npm run dev --workspace=packages/frontend",
+    "dev:backend": "node packages/backend/index.js",
+    "build": "npm run build --workspace=packages/frontend",
+    "start": "node packages/backend/index.js",
+    "install:all": "npm install --workspaces"
+  },
+  "keywords": [
+    "feishu",
+    "maxcompute",
+    "sqlserver",
+    "connector"
+  ],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

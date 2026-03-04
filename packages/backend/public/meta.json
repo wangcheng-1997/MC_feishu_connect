@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "type": "data_connector",
+  "name": "MaxCompute 数据同步",
+  "description": "将阿里云 MaxCompute 数据同步到飞书多维表格",
+  "icon": "https://img.alicdn.com/tfs/TB1Ly5oS3HqK1RjSZFPXXcwapXa-238-200.png",
+  "extraData": {
+    "disabledPeriodicSync": false,
+    "dataSourceConfigUiUri": "http://localhost:5173/",
+    "initHeight": 600,
+    "initWidth": 600
+  },
+  "protocol": {
+    "type": "http",
+    "httpProtocol": {
+      "uris": [
+        {
+          "type": "tableMeta",
+          "uri": "/api/table_meta"
+        },
+        {
+          "type": "records",
+          "uri": "/api/records"
+        }
+      ]
+    }
+  },
+  "author": "Kian Wang",
+  "homepage": "https://github.com/your-repo/maxcompute-lark-connector"
+}

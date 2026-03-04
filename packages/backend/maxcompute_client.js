@@ -1,0 +1,221 @@
+const axios = require('axios');
+const crypto = require('crypto');
+
+/**
+ * MaxCompute 客户端
+ * 支持通过 MaxCompute Tunnel 和 REST API 获取数据
+ */
+class MaxComputeClient {
+  constructor(config) {
+    this.accessId = config.accessId;
+    this.accessKey = config.accessKey;
+    this.endpoint = config.endpoint; // 如: http://service.cn.maxcompute.aliyun.com/api
+    this.projectName = config.projectName;
+    this.schemaName = config.schemaName || 'default';
+  }
+
+  /**
+   * 计算 MaxCompute 签名
+   */
+  _sign(method, path, date, contentType = '', contentMd5 = '') {
+    const stringToSign = `${method}\n${contentMd5}\n${contentType}\n${date}\n${path}`;
+    const signature = crypto
+      .createHmac('sha1', this.accessKey)
+      .update(stringToSign)
+      .digest('base64');
+    return `ODPS ${this.accessId}:${signature}`;
+  }
+
+  /**
+   * 获取请求头
+   */
+  _getHeaders(method, path, body = '') {
+    const date = new Date().toUTCString();
+    const contentType = 'application/json';
+    const contentMd5 = body ? crypto.createHash('md5').update(body).digest('base64') : '';
+    
+    return {
+      'Authorization': this._sign(method, path, date, contentType, contentMd5),
+      'Date': date,
+      'Content-Type': contentType,
+      'x-odps-project-name': this.projectName,
+      'x-odps-schema-name': this.schemaName,
+    };
+  }
+
+  /**
+   * 执行 SQL 查询
+   */
+  async executeSQL(sql) {
+    try {
+      // MaxCompute SQL 任务提交
+      const path = `/projects/${this.projectName}/instances`;
+      const url = `${this.endpoint}${path}`;
+      
+      const task = {
+        Name: 'SQLTask',
+        Type: 'SQL',
+        Query: sql,
+      };
+
+      const body = JSON.stringify({
+        Task: task,
+        Priority: 1,
+      });
+
+      const headers = this._getHeaders('POST', path, body);
+      
+      const response = await axios.post(url, body, { headers });
+      const instanceId = response.data.InstanceId;
+
+      // 等待任务完成并获取结果
+      return await this._waitForInstance(instanceId);
+    } catch (error) {
+      console.error('MaxCompute SQL 执行失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 等待实例完成
+   */
+  async _waitForInstance(instanceId, maxRetries = 60) {
+    const path = `/projects/${this.projectName}/instances/${instanceId}`;
+    const url = `${this.endpoint}${path}`;
+
+    for (let i = 0; i < maxRetries; i++) {
+      const headers = this._getHeaders('GET', path);
+      const response = await axios.get(url, { headers });
+      
+      const status = response.data.Instance.Status;
+      
+      if (status === 'Terminated') {
+        // 获取结果
+        return await this._getInstanceResult(instanceId);
+      } else if (status === 'Failed') {
+        throw new Error(`任务执行失败: ${response.data.Instance.Message}`);
+      }
+
+      // 等待 2 秒后重试
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+
+    throw new Error('等待任务完成超时');
+  }
+
+  /**
+   * 获取实例结果
+   */
+  async _getInstanceResult(instanceId) {
+    // 通过 Tunnel 获取结果
+    const path = `/projects/${this.projectName}/instances/${instanceId}/results`;
+    const url = `${this.endpoint}${path}`;
+    
+    const headers = this._getHeaders('GET', path);
+    const response = await axios.get(url, { headers });
+    
+    return response.data;
+  }
+
+  /**
+   * 获取表的元数据
+   */
+  async getTableMeta(tableName) {
+    try {
+      const path = `/projects/${this.projectName}/tables/${tableName}`;
+      const url = `${this.endpoint}${path}`;
+      
+      const headers = this._getHeaders('GET', path);
+      const response = await axios.get(url, { headers });
+      
+      return response.data;
+    } catch (error) {
+      console.error('获取表元数据失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取表数据（通过 SQL）
+   */
+  async getTableData(tableName, limit = 1000, offset = 0) {
+    const sql = `SELECT * FROM ${tableName} LIMIT ${limit} OFFSET ${offset}`;
+    return await this.executeSQL(sql);
+  }
+
+  /**
+   * 获取表字段列表
+   */
+  async getTableColumns(tableName) {
+    const tableMeta = await this.getTableMeta(tableName);
+    return tableMeta.Table.Columns || [];
+  }
+
+  /**
+   * 测试连接
+   * 尝试获取项目信息来验证连接
+   */
+  async testConnection() {
+    try {
+      // 尝试获取项目信息来验证连接
+      const path = `/projects/${this.projectName}`;
+      const url = `${this.endpoint}${path}`;
+      
+      const headers = this._getHeaders('GET', path);
+      const response = await axios.get(url, { headers, timeout: 10000 });
+      
+      if (response.status === 200) {
+        return {
+          success: true,
+          message: '连接成功',
+          data: {
+            projectName: this.projectName,
+            schemaName: this.schemaName,
+            endpoint: this.endpoint,
+          },
+        };
+      }
+      
+      return {
+        success: false,
+        message: `连接失败，状态码: ${response.status}`,
+      };
+    } catch (error) {
+      console.error('MaxCompute 连接测试失败:', error.message);
+      
+      let errorMessage = '连接失败';
+      if (error.response) {
+        // 服务器返回了错误响应
+        switch (error.response.status) {
+          case 401:
+            errorMessage = '认证失败，请检查 AccessKey ID 和 AccessKey Secret';
+            break;
+          case 403:
+            errorMessage = '权限不足，请检查账号权限';
+            break;
+          case 404:
+            errorMessage = '项目不存在，请检查项目名称';
+            break;
+          case 500:
+            errorMessage = '服务器内部错误';
+            break;
+          default:
+            errorMessage = `连接失败: ${error.response.status} - ${error.response.statusText}`;
+        }
+      } else if (error.code === 'ECONNREFUSED') {
+        errorMessage = '无法连接到服务器，请检查网络或端点地址';
+      } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
+        errorMessage = '连接超时，请检查网络或端点地址';
+      } else {
+        errorMessage = `连接失败: ${error.message}`;
+      }
+      
+      return {
+        success: false,
+        message: errorMessage,
+      };
+    }
+  }
+}
+
+module.exports = { MaxComputeClient };

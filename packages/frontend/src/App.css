@@ -1,0 +1,98 @@
+/* MaxCompute Data Sync Connector Styles */
+
+.app-container {
+  min-height: 100vh;
+  padding: 24px;
+  background: #f5f5f5;
+}
+
+.config-card {
+  max-width: 600px;
+  margin: 0 auto;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.button-group {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.user-info {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+  text-align: right;
+}
+
+/* Form styles */
+.ant-form-item {
+  margin-bottom: 16px;
+}
+
+.ant-form-item-label {
+  font-weight: 500;
+}
+
+/* Card styles */
+.ant-card-head {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.ant-card-body {
+  padding: 24px;
+}
+
+/* Divider styles */
+.ant-divider {
+  margin: 24px 0;
+}
+
+/* Input styles */
+.ant-input,
+.ant-input-password,
+.ant-select-selector {
+  border-radius: 4px;
+}
+
+/* Button styles */
+.ant-btn {
+  border-radius: 4px;
+}
+
+.ant-btn-primary {
+  background: #3370ff;
+  border-color: #3370ff;
+}
+
+.ant-btn-primary:hover {
+  background: #2860e0;
+  border-color: #2860e0;
+}
+
+/* Typography styles */
+.ant-typography {
+  margin-bottom: 0;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+  .app-container {
+    padding: 16px;
+  }
+  
+  .config-card {
+    max-width: 100%;
+  }
+  
+  .button-group {
+    flex-direction: column;
+  }
+  
+  .button-group .ant-btn {
+    width: 100%;
+    margin-right: 0 !important;
+    margin-bottom: 8px;
+  }
+}
