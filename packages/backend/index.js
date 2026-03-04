@@ -37,6 +37,9 @@ app.get("/", (req, res) => {
     res.send("Data Sync Connector (MaxCompute & SQL Server) - Running");
 });
 
+// 静态文件服务
+app.use(express.static(path.join(__dirname, "../frontend/dist")));
+
 app.get("/meta.json", (req, res) => {
     fs.readFile(
         path.join(__dirname, "./public/meta.json"),
