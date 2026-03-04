@@ -225,8 +225,8 @@ export default function App() {
             const values = await form.validateFields();
             setTestingConnection(true);
             
-            // 后端服务地址，开发环境使用 localhost:3000
-            const baseUrl = 'http://localhost:3000';
+            // 后端服务地址，使用相对路径（部署时自动适应）
+            const baseUrl = '';
             let testUrl = '';
             let requestBody = {};
             
