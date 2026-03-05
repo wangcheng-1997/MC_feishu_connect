@@ -246,7 +246,7 @@ export default function App() {
             }
         } catch (error) {
             console.error("连接测试失败:", error);
-            message.error(`连接测试失败: ${error.message || '网络或服务异常'}`);
+            message.error(`连接测试失败: ${(error as Error).message || '网络或服务异常'}`);
         } finally {
             setTestingConnection(false);
         }
@@ -289,7 +289,7 @@ export default function App() {
             }
         } catch (error) {
             console.error("获取表列表失败:", error);
-            message.error(`获取表列表失败: ${error.message || '网络或服务异常'}`);
+            message.error(`获取表列表失败: ${(error as Error).message || '网络或服务异常'}`);
         } finally {
             setLoadingTables(false);
         }
@@ -514,7 +514,7 @@ export default function App() {
                             placeholder="请搜索并选择表名"
                             loading={loadingTables}
                             filterOption={(input, option) =>
-                                (option?.children as string)
+                                ((option?.label ?? option?.value) as string)
                                     .toLowerCase()
                                     .includes(input.toLowerCase())
                             }
