@@ -245,6 +245,14 @@ class MaxComputeClient {
       };
     }
   }
+
+  /**
+   * 关闭连接
+   */
+  async close() {
+    // MaxCompute 客户端不需要特殊的关闭操作
+    // 因为它使用的是 HTTP 请求，没有长连接
+  }
 }
 
 module.exports = { MaxComputeClient };

@@ -25,7 +25,21 @@ class DataSourceFactory {
    */
   static async createMaxComputeDataSource(config) {
     const { MaxComputeClient } = require('./maxcompute_client.js');
-    return new MaxComputeClient(config);
+    
+    // 处理嵌套的数据格式
+    let processedConfig = config;
+    if (config.accessId && typeof config.accessId === 'object') {
+      // 提取嵌套的配置
+      processedConfig = {
+        accessId: config.accessId.accessId || config.accessId,
+        accessKey: config.accessKey?.accessKey || config.accessKey,
+        endpoint: config.endpoint?.endpoint || config.endpoint,
+        projectName: config.projectName,
+        schemaName: config.schemaName || 'default'
+      };
+    }
+    
+    return new MaxComputeClient(processedConfig);
   }
 
   /**

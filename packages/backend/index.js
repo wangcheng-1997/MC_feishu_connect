@@ -234,12 +234,18 @@ app.post("/api/test_connection", async (req, res) => {
     console.log("test_connection 的请求数据", req.body);
 
     try {
+        // 正确处理请求数据格式
+        const dataSourceConfig = {};
+        dataSourceConfig[req.body.dataSourceType] = req.body;
+        
         // 创建数据源实例
-        const dataSource = await DataSourceFactory.createDataSource({ 
-            [req.body.dataSourceType]: req.body 
-        });
+        const dataSource = await DataSourceFactory.createDataSource(dataSourceConfig);
         const result = await dataSource.testConnection();
-        await dataSource.close();
+        
+        // 安全调用 close 方法
+        if (dataSource.close && typeof dataSource.close === 'function') {
+            await dataSource.close();
+        }
 
         res.status(200).json({
             code: result.success ? 0 : 500,
@@ -267,7 +273,11 @@ app.post("/api/test_sqlserver_connection", async (req, res) => {
     try {
         const dataSource = await DataSourceFactory.createDataSource({ sqlserver: req.body });
         const result = await dataSource.testConnection();
-        await dataSource.close();
+        
+        // 安全调用 close 方法
+        if (dataSource.close && typeof dataSource.close === 'function') {
+            await dataSource.close();
+        }
 
         res.status(200).json({
             code: result.success ? 0 : 500,
@@ -303,12 +313,18 @@ app.post("/api/tables", async (req, res) => {
             });
         }
 
+        // 正确处理请求数据格式
+        const dataSourceConfig = {};
+        dataSourceConfig[req.body.dataSourceType] = req.body;
+        
         // 创建数据源实例
-        const dataSource = await DataSourceFactory.createDataSource({ 
-            [req.body.dataSourceType]: req.body 
-        });
+        const dataSource = await DataSourceFactory.createDataSource(dataSourceConfig);
         const tables = await dataSource.getTables();
-        await dataSource.close();
+        
+        // 安全调用 close 方法
+        if (dataSource.close && typeof dataSource.close === 'function') {
+            await dataSource.close();
+        }
 
         // 缓存结果
         cacheManager.cacheTables(req.body, tables);
