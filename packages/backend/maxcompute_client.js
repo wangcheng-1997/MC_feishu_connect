@@ -24,7 +24,7 @@ class MaxComputeClient {
     console.log("签名参数:", { method, contentMd5, contentType, date, path });
     const signature = crypto
       .createHmac('sha1', this.accessKey)
-      .update(stringToSign)
+      .update(stringToSign, 'utf8')
       .digest('base64');
     console.log("计算出的签名:", signature);
     return `ODPS ${this.accessId}:${signature}`;
@@ -45,7 +45,6 @@ class MaxComputeClient {
     }
     
     const headers = {
-      'Authorization': this._sign(method, path, date, contentType, contentMd5),
       'Date': date,
       'x-odps-project-name': this.projectName,
       'x-odps-schema-name': this.schemaName,
@@ -58,6 +57,8 @@ class MaxComputeClient {
     if (contentMd5) {
       headers['Content-MD5'] = contentMd5;
     }
+    
+    headers['Authorization'] = this._sign(method, path, date, contentType, contentMd5);
     
     return headers;
   }
