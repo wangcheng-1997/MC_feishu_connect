@@ -16,6 +16,8 @@ class MaxComputeClient {
 
   /**
    * 计算 MaxCompute 签名
+   * 根据 MaxCompute 官方文档规范
+   * 签名字符串格式: HTTP-Verb + "\n" + Content-MD5 + "\n" + Content-Type + "\n" + Date + "\n" + CanonicalizedODPSResource
    */
   _sign(method, path, date, contentType = '', contentMd5 = '') {
     const stringToSign = `${method}\n${contentMd5}\n${contentType}\n${date}\n${path}`;
@@ -32,6 +34,7 @@ class MaxComputeClient {
 
   /**
    * 获取请求头
+   * 根据 MaxCompute 官方文档规范设置请求头
    */
   _getHeaders(method, path, body = '') {
     const date = new Date().toUTCString();
@@ -41,14 +44,17 @@ class MaxComputeClient {
     
     if (method === 'POST' && body) {
       contentType = 'application/json';
-        contentMd5 = crypto.createHash('md5').update(body).digest('base64');
+      contentMd5 = crypto.createHash('md5').update(body).digest('base64');
     }
     
     const headers = {
       'Date': date,
       'x-odps-project-name': this.projectName,
-      'x-odps-schema-name': this.schemaName,
     };
+    
+    if (this.schemaName && this.schemaName !== 'default') {
+      headers['x-odps-schema-name'] = this.schemaName;
+    }
     
     if (contentType) {
       headers['Content-Type'] = contentType;
@@ -65,10 +71,10 @@ class MaxComputeClient {
 
   /**
    * 执行 SQL 查询
+   * 根据 MaxCompute 官方文档规范提交 SQL 任务
    */
   async executeSQL(sql) {
     try {
-      // MaxCompute SQL 任务提交
       const path = `/projects/${this.projectName}/instances`;
       const url = `${this.endpoint}${path}`;
       
@@ -86,9 +92,8 @@ class MaxComputeClient {
       const headers = this._getHeaders('POST', path, body);
       
       const response = await axios.post(url, body, { headers });
-      const instanceId = response.data.InstanceId;
+      const instanceId = response.data.Instance.InstanceId;
 
-      // 等待任务完成并获取结果
       return await this._waitForInstance(instanceId);
     } catch (error) {
       console.error('MaxCompute SQL 执行失败:', error.message);
@@ -98,6 +103,7 @@ class MaxComputeClient {
 
   /**
    * 等待实例完成
+   * 根据 MaxCompute 官方文档规范轮询任务状态
    */
   async _waitForInstance(instanceId, maxRetries = 60) {
     const path = `/projects/${this.projectName}/instances/${instanceId}`;
@@ -110,13 +116,14 @@ class MaxComputeClient {
       const status = response.data.Instance.Status;
       
       if (status === 'Terminated') {
-        // 获取结果
         return await this._getInstanceResult(instanceId);
       } else if (status === 'Failed') {
-        throw new Error(`任务执行失败: ${response.data.Instance.Message}`);
+        const message = response.data.Instance.Message || '未知错误';
+        throw new Error(`任务执行失败: ${message}`);
+      } else if (status === 'Cancelled') {
+        throw new Error('任务被取消');
       }
 
-      // 等待 2 秒后重试
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
@@ -125,20 +132,30 @@ class MaxComputeClient {
 
   /**
    * 获取实例结果
+   * 根据 MaxCompute 官方文档规范获取查询结果
    */
   async _getInstanceResult(instanceId) {
-    // 通过 Tunnel 获取结果
-    const path = `/projects/${this.projectName}/instances/${instanceId}/results`;
+    const path = `/projects/${this.projectName}/instances/${instanceId}`;
     const url = `${this.endpoint}${path}`;
     
     const headers = this._getHeaders('GET', path);
     const response = await axios.get(url, { headers });
+    
+    const instance = response.data.Instance;
+    
+    if (instance.Result && instance.Result.Rows) {
+      return {
+        Rows: instance.Result.Rows,
+        Columns: instance.Result.Columns || [],
+      };
+    }
     
     return response.data;
   }
 
   /**
    * 获取表的元数据
+   * 根据 MaxCompute 官方文档规范获取表结构
    */
   async getTableMeta(tableName) {
     try {
@@ -157,10 +174,24 @@ class MaxComputeClient {
 
   /**
    * 获取表数据（通过 SQL）
+   * 注意：MaxCompute SQL 不支持 OFFSET 语法，需要使用其他方式分页
    */
   async getTableData(tableName, limit = 1000, offset = 0) {
-    const sql = `SELECT * FROM ${tableName} LIMIT ${limit} OFFSET ${offset}`;
-    return await this.executeSQL(sql);
+    let sql;
+    if (offset > 0) {
+      sql = `SELECT * FROM ${tableName} LIMIT ${offset + limit}`;
+      const result = await this.executeSQL(sql);
+      if (result.Rows && result.Rows.length > offset) {
+        return {
+          Rows: result.Rows.slice(offset),
+          Columns: result.Columns || [],
+        };
+      }
+      return { Rows: [], Columns: result.Columns || [] };
+    } else {
+      sql = `SELECT * FROM ${tableName} LIMIT ${limit}`;
+      return await this.executeSQL(sql);
+    }
   }
 
   /**
@@ -202,7 +233,7 @@ class MaxComputeClient {
 
   /**
    * 测试连接
-   * 尝试获取项目信息来验证连接
+   * 根据 MaxCompute 官方文档规范验证连接
    */
   async testConnection() {
     try {
@@ -214,7 +245,6 @@ class MaxComputeClient {
         schemaName: this.schemaName
       });
       
-      // 尝试获取项目信息来验证连接
       const path = `/projects/${this.projectName}`;
       const url = `${this.endpoint}${path}`;
       
@@ -257,7 +287,6 @@ class MaxComputeClient {
       
       let errorMessage = '连接失败';
       if (error.response) {
-        // 服务器返回了错误响应
         switch (error.response.status) {
           case 401:
             errorMessage = '认证失败，请检查 AccessKey ID 和 AccessKey Secret';

@@ -23,24 +23,21 @@ async function getTableRecordsFromMaxCompute(config, fields) {
     
     let data;
     
-    // 如果提供了自定义 SQL，则执行自定义查询
     if (config.sql) {
       data = await client.executeSQL(config.sql);
     } else {
-      // 否则查询整个表
       const limit = config.limit || 1000;
       const offset = config.offset || 0;
       data = await client.getTableData(config.tableName, limit, offset);
     }
     
-    // 转换数据格式
-    const hasMore = data.length >= (config.limit || 1000);
+    const rows = data.Rows || [];
+    const hasMore = rows.length >= (config.limit || 1000);
     const nextPageToken = hasMore ? String((config.offset || 0) + (config.limit || 1000)) : '';
     
-    return generateTableRecords(data, fields, hasMore, nextPageToken);
+    return generateTableRecords(rows, fields, hasMore, nextPageToken);
   } catch (error) {
     console.error('获取 MaxCompute 表记录失败:', error);
-    // 返回默认数据作为 fallback
     return getDefaultTableRecords();
   }
 }

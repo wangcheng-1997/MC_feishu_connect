@@ -19,13 +19,10 @@ async function getTableMetaFromMaxCompute(config) {
   try {
     const client = new MaxComputeClient(config);
     
-    // 获取 MaxCompute 表元数据
     const tableMeta = await client.getTableMeta(config.tableName);
     
-    // 提取列信息
-    const columns = tableMeta.Table.Columns || [];
+    const columns = tableMeta.Table?.Columns || [];
     
-    // 转换为飞书多维表格格式
     return generateTableMeta(
       config.tableName,
       columns,
@@ -33,7 +30,6 @@ async function getTableMetaFromMaxCompute(config) {
     );
   } catch (error) {
     console.error('获取 MaxCompute 表元数据失败:', error);
-    // 返回默认元数据作为 fallback
     return getDefaultTableMeta();
   }
 }
