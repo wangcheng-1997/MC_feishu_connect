@@ -214,13 +214,23 @@ export default function App() {
     const handleTestConnection = async () => {
         try {
             // 只验证必要的连接字段，不验证表名
-            const values = await form.validateFields([
-                dataSourceType === "maxcompute" 
-                    ? ['accessId', 'accessKey', 'endpoint', 'projectName', 'schemaName']
-                    : ['server', 'port', 'database', 'user', 'password', 'schema', 'encrypt', 'trustServerCertificate']
-            ]);
+            const fieldNames = dataSourceType === "maxcompute" 
+                ? ['accessId', 'accessKey', 'endpoint', 'projectName', 'schemaName']
+                : ['server', 'port', 'database', 'user', 'password', 'schema', 'encrypt', 'trustServerCertificate'];
             
-            console.log("表单验证后的值:", values);
+            await form.validateFields(fieldNames);
+            
+            // 使用 getFieldsValue 获取表单值，避免 validateFields 返回嵌套数据
+            const allValues = form.getFieldsValue();
+            console.log("所有表单值:", allValues);
+            
+            // 只提取需要的字段
+            const values: any = {};
+            fieldNames.forEach((field) => {
+                values[field] = allValues[field];
+            });
+            
+            console.log("提取的连接字段值:", values);
             console.log("数据源类型:", dataSourceType);
             
             setTestingConnection(true);
