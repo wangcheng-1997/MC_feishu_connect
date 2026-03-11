@@ -210,7 +210,12 @@ export default function App() {
 
     const handleTestConnection = async () => {
         try {
-            const values = await form.validateFields();
+            // 只验证必要的连接字段，不验证表名
+            const values = await form.validateFields([
+                dataSourceType === "maxcompute" 
+                    ? ['accessId', 'accessKey', 'endpoint', 'projectName', 'schemaName']
+                    : ['server', 'port', 'database', 'user', 'password', 'schema', 'encrypt', 'trustServerCertificate']
+            ]);
             setTestingConnection(true);
             
             // 后端服务地址，使用相对路径（部署时自动适应）
