@@ -144,8 +144,11 @@ export default function App() {
     }, [form]);
 
     const handleDataSourceChange = (e: any) => {
-        setDataSourceType(e.target.value);
+        const newType = e.target.value;
+        console.log("切换数据源类型:", newType);
+        setDataSourceType(newType);
         form.resetFields();
+        console.log("表单已重置");
     };
 
 
@@ -216,6 +219,10 @@ export default function App() {
                     ? ['accessId', 'accessKey', 'endpoint', 'projectName', 'schemaName']
                     : ['server', 'port', 'database', 'user', 'password', 'schema', 'encrypt', 'trustServerCertificate']
             ]);
+            
+            console.log("表单验证后的值:", values);
+            console.log("数据源类型:", dataSourceType);
+            
             setTestingConnection(true);
             
             // 后端服务地址，使用相对路径（部署时自动适应）
@@ -227,6 +234,8 @@ export default function App() {
                 dataSourceType,
                 ...values
             };
+            
+            console.log("发送的请求体:", requestBody);
             
             const response = await fetch(testUrl, {
                 method: "POST",

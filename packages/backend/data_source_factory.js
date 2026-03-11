@@ -26,6 +26,8 @@ class DataSourceFactory {
   static async createMaxComputeDataSource(config) {
     const { MaxComputeClient } = require('./maxcompute_client.js');
     
+    console.log("原始配置:", JSON.stringify(config, null, 2));
+    
     // 处理各种异常的数据格式
     let processedConfig = {
       accessId: '',
@@ -39,6 +41,7 @@ class DataSourceFactory {
     if (typeof config === 'object') {
       // 处理嵌套格式
       if (config.accessId && typeof config.accessId === 'object') {
+        console.log("检测到嵌套格式，尝试提取值");
         // 尝试从嵌套结构中提取
         processedConfig.accessId = this.extractValue(config, 'accessId');
         processedConfig.accessKey = this.extractValue(config, 'accessKey');
@@ -46,6 +49,7 @@ class DataSourceFactory {
         processedConfig.projectName = this.extractValue(config, 'projectName');
         processedConfig.schemaName = this.extractValue(config, 'schemaName') || 'default';
       } else {
+        console.log("使用扁平格式");
         // 直接使用扁平格式
         processedConfig.accessId = config.accessId || '';
         processedConfig.accessKey = config.accessKey || '';
@@ -55,8 +59,16 @@ class DataSourceFactory {
       }
     }
     
+    console.log("处理后的配置:", JSON.stringify(processedConfig, null, 2));
+    
     // 验证必要字段
     if (!processedConfig.accessId || !processedConfig.accessKey || !processedConfig.endpoint || !processedConfig.projectName) {
+      console.error("缺少必要字段:", {
+        accessId: !!processedConfig.accessId,
+        accessKey: !!processedConfig.accessKey,
+        endpoint: !!processedConfig.endpoint,
+        projectName: !!processedConfig.projectName
+      });
       throw new Error('缺少必要的 MaxCompute 配置参数');
     }
     
