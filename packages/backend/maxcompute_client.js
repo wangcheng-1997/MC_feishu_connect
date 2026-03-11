@@ -19,7 +19,9 @@ class MaxComputeClient {
    */
   _sign(method, path, date, contentType = '', contentMd5 = '') {
     const stringToSign = `${method}\n${contentMd5}\n${contentType}\n${date}\n${path}`;
-    console.log("签名字符串:", stringToSign);
+    console.log("签名字符串:", JSON.stringify(stringToSign));
+    console.log("签名字符串内容:", stringToSign);
+    console.log("签名参数:", { method, contentMd5, contentType, date, path });
     const signature = crypto
       .createHmac('sha1', this.accessKey)
       .update(stringToSign)
