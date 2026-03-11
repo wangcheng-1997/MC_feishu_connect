@@ -19,10 +19,12 @@ class MaxComputeClient {
    */
   _sign(method, path, date, contentType = '', contentMd5 = '') {
     const stringToSign = `${method}\n${contentMd5}\n${contentType}\n${date}\n${path}`;
+    console.log("签名字符串:", stringToSign);
     const signature = crypto
       .createHmac('sha1', this.accessKey)
       .update(stringToSign)
       .digest('base64');
+    console.log("计算出的签名:", signature);
     return `ODPS ${this.accessId}:${signature}`;
   }
 
@@ -31,16 +33,31 @@ class MaxComputeClient {
    */
   _getHeaders(method, path, body = '') {
     const date = new Date().toUTCString();
-    const contentType = 'application/json';
-    const contentMd5 = body ? crypto.createHash('md5').update(body).digest('base64') : '';
     
-    return {
+    let contentType = '';
+    let contentMd5 = '';
+    
+    if (method === 'POST' && body) {
+      contentType = 'application/json';
+        contentMd5 = crypto.createHash('md5').update(body).digest('base64');
+    }
+    
+    const headers = {
       'Authorization': this._sign(method, path, date, contentType, contentMd5),
       'Date': date,
-      'Content-Type': contentType,
       'x-odps-project-name': this.projectName,
       'x-odps-schema-name': this.schemaName,
     };
+    
+    if (contentType) {
+      headers['Content-Type'] = contentType;
+    }
+    
+    if (contentMd5) {
+      headers['Content-MD5'] = contentMd5;
+    }
+    
+    return headers;
   }
 
   /**
