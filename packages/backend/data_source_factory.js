@@ -28,36 +28,14 @@ class DataSourceFactory {
     
     console.log("原始配置:", JSON.stringify(config, null, 2));
     
-    // 处理各种异常的数据格式
-    let processedConfig = {
-      accessId: '',
-      accessKey: '',
-      endpoint: '',
-      projectName: '',
-      schemaName: 'default'
+    // 直接使用扁平格式配置
+    const processedConfig = {
+      accessId: config.accessId || '',
+      accessKey: config.accessKey || '',
+      endpoint: config.endpoint || '',
+      projectName: config.projectName || '',
+      schemaName: config.schemaName || 'default'
     };
-    
-    // 提取扁平格式的配置
-    if (typeof config === 'object') {
-      // 处理嵌套格式
-      if (config.accessId && typeof config.accessId === 'object') {
-        console.log("检测到嵌套格式，尝试提取值");
-        // 尝试从嵌套结构中提取
-        processedConfig.accessId = this.extractValue(config, 'accessId');
-        processedConfig.accessKey = this.extractValue(config, 'accessKey');
-        processedConfig.endpoint = this.extractValue(config, 'endpoint');
-        processedConfig.projectName = this.extractValue(config, 'projectName');
-        processedConfig.schemaName = this.extractValue(config, 'schemaName') || 'default';
-      } else {
-        console.log("使用扁平格式");
-        // 直接使用扁平格式
-        processedConfig.accessId = config.accessId || '';
-        processedConfig.accessKey = config.accessKey || '';
-        processedConfig.endpoint = config.endpoint || '';
-        processedConfig.projectName = config.projectName || '';
-        processedConfig.schemaName = config.schemaName || 'default';
-      }
-    }
     
     console.log("处理后的配置:", JSON.stringify(processedConfig, null, 2));
     
@@ -73,26 +51,6 @@ class DataSourceFactory {
     }
     
     return new MaxComputeClient(processedConfig);
-  }
-  
-  // 辅助方法：从嵌套对象中提取值
-  static extractValue(obj, key) {
-    if (!obj) return '';
-    
-    // 直接获取
-    if (obj[key] && typeof obj[key] !== 'object') {
-      return obj[key];
-    }
-    
-    // 递归查找
-    for (let prop in obj) {
-      if (obj[prop] && typeof obj[prop] === 'object') {
-        const value = this.extractValue(obj[prop], key);
-        if (value) return value;
-      }
-    }
-    
-    return '';
   }
 
   /**

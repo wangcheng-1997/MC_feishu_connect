@@ -186,12 +186,28 @@ class MaxComputeClient {
    */
   async testConnection() {
     try {
+      console.log("开始测试 MaxCompute 连接");
+      console.log("配置信息:", {
+        accessId: this.accessId,
+        endpoint: this.endpoint,
+        projectName: this.projectName,
+        schemaName: this.schemaName
+      });
+      
       // 尝试获取项目信息来验证连接
       const path = `/projects/${this.projectName}`;
       const url = `${this.endpoint}${path}`;
       
+      console.log("请求 URL:", url);
+      console.log("请求路径:", path);
+      
       const headers = this._getHeaders('GET', path);
+      console.log("请求头:", JSON.stringify(headers, null, 2));
+      
       const response = await axios.get(url, { headers, timeout: 10000 });
+      
+      console.log("响应状态:", response.status);
+      console.log("响应数据:", JSON.stringify(response.data, null, 2));
       
       if (response.status === 200) {
         return {
@@ -211,6 +227,13 @@ class MaxComputeClient {
       };
     } catch (error) {
       console.error('MaxCompute 连接测试失败:', error.message);
+      console.error('错误详情:', error);
+      
+      if (error.response) {
+        console.error('响应状态:', error.response.status);
+        console.error('响应数据:', JSON.stringify(error.response.data, null, 2));
+        console.error('响应头:', JSON.stringify(error.response.headers, null, 2));
+      }
       
       let errorMessage = '连接失败';
       if (error.response) {
