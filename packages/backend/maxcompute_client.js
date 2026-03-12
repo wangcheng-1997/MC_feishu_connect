@@ -9,15 +9,26 @@ import argparse
 import traceback
 
 def get_connection(endpoint, project_name, access_id, access_key):
-    from odps import ODPS
-    
-    odps = ODPS(
-        access_id=access_id,
-        secret_access_key=access_key,
-        project=project_name,
-        endpoint=endpoint
-    )
-    return odps
+    try:
+        print("正在导入 PyODPS...")
+        from odps import ODPS
+        print("PyODPS 导入成功")
+        
+        odps = ODPS(
+            access_id=access_id,
+            secret_access_key=access_key,
+            project=project_name,
+            endpoint=endpoint
+        )
+        print("ODPS 实例创建成功")
+        return odps
+    except ImportError as e:
+        print(f"PyODPS 导入失败: {str(e)}")
+        print("请安装 PyODPS: pip install pyodps")
+        raise
+    except Exception as e:
+        print(f"创建连接失败: {str(e)}")
+        raise
 
 def test_connection(endpoint, project_name, access_id, access_key):
     try:
@@ -29,10 +40,16 @@ def test_connection(endpoint, project_name, access_id, access_key):
 
 def get_tables(endpoint, project_name, access_id, access_key):
     try:
+        print(f"尝试连接到: {endpoint}, 项目: {project_name}")
         odps = get_connection(endpoint, project_name, access_id, access_key)
+        print("连接成功，正在获取表列表...")
         tables = list(odps.list_tables())
+        print(f"找到 {len(tables)} 个表")
         return {'success': True, 'data': [{'name': t.name, 'schema': 'default'} for t in tables]}
     except Exception as e:
+        print(f"获取表列表失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return {'success': True, 'data': []}
 
 def get_table_meta(endpoint, project_name, access_id, access_key, table_name):
@@ -150,38 +167,64 @@ function runPyOdps(action, config) {
     }
 
     console.log('执行 PyODPS:', action, config.tableName || config.sql || '');
-
+    
+    // 检测 Python 环境
     const python = process.env.REPLIT ? 'python3.11' : (process.platform === 'win32' ? 'python' : 'python3');
-    const proc = spawn(python, args, {
-      cwd: __dirname
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    proc.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-
-    proc.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
-
-    proc.on('close', (code) => {
+    console.log('使用 Python 命令:', python);
+    
+    // 检查 Python 是否可用
+    const checkPython = spawn(python, ['--version'], { cwd: __dirname });
+    checkPython.on('close', (code) => {
       if (code !== 0) {
-        console.error('PyODPS 错误:', stderr);
-        resolve({ success: false, message: stderr || `进程退出码: ${code}` });
-        return;
-      }
-
-      try {
-        const result = JSON.parse(stdout);
-        resolve(result);
-      } catch (e) {
-        console.error('JSON 解析错误:', stdout);
-        resolve({ success: false, message: `无法解析输出: ${stdout}` });
+        console.error('Python 不可用，尝试备选命令');
+        // 尝试备选 Python 命令
+        const pythonAlt = process.platform === 'win32' ? 'python' : 'python3';
+        const proc = spawn(pythonAlt, args, { cwd: __dirname });
+        handleProcessOutput(proc, resolve);
+      } else {
+        const proc = spawn(python, args, { cwd: __dirname });
+        handleProcessOutput(proc, resolve);
       }
     });
+  });
+}
+
+function handleProcessOutput(proc, resolve) {
+  let stdout = '';
+  let stderr = '';
+
+  proc.stdout.on('data', (data) => {
+    stdout += data.toString();
+  });
+
+  proc.stderr.on('data', (data) => {
+    stderr += data.toString();
+  });
+
+  proc.on('close', (code) => {
+    console.log('Python 进程退出码:', code);
+    
+    if (stderr) {
+      console.error('Python 错误输出:', stderr);
+    }
+    
+    if (stdout) {
+      console.log('Python 输出:', stdout);
+    }
+
+    if (code !== 0) {
+      console.error('PyODPS 执行失败:', stderr);
+      resolve({ success: false, message: stderr || `进程退出码: ${code}` });
+      return;
+    }
+
+    try {
+      const result = JSON.parse(stdout);
+      resolve(result);
+    } catch (e) {
+      console.error('JSON 解析错误:', stdout);
+      resolve({ success: false, message: `无法解析输出: ${stdout}` });
+    }
   });
 }
 

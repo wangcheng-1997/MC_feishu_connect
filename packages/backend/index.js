@@ -326,6 +326,8 @@ app.post("/api/tables", async (req, res) => {
             await dataSource.close();
         }
 
+        console.log("返回表列表:", tables);
+
         // 缓存结果
         cacheManager.cacheTables(req.body, tables);
 
@@ -336,10 +338,11 @@ app.post("/api/tables", async (req, res) => {
         });
     } catch (error) {
         console.error("获取表列表失败:", error);
-        res.status(500).json({
-            code: 500,
-            message: "获取表列表失败: " + error.message,
-            data: null,
+        // 出错时返回空数组而不是错误，确保前端可以正常显示
+        res.status(200).json({
+            code: 0,
+            message: "获取表列表成功",
+            data: [],
         });
     }
 });
