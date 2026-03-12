@@ -10,9 +10,10 @@ import traceback
 
 def get_connection(endpoint, project_name, access_id, access_key):
     try:
-        print("正在导入 PyODPS...")
+        import sys
+        print("正在导入 PyODPS...", file=sys.stderr)
         from odps import ODPS
-        print("PyODPS 导入成功")
+        print("PyODPS 导入成功", file=sys.stderr)
         
         odps = ODPS(
             access_id=access_id,
@@ -20,14 +21,16 @@ def get_connection(endpoint, project_name, access_id, access_key):
             project=project_name,
             endpoint=endpoint
         )
-        print("ODPS 实例创建成功")
+        print("ODPS 实例创建成功", file=sys.stderr)
         return odps
     except ImportError as e:
-        print(f"PyODPS 导入失败: {str(e)}")
-        print("请安装 PyODPS: pip install pyodps")
+        import sys
+        print(f"PyODPS 导入失败: {str(e)}", file=sys.stderr)
+        print("请安装 PyODPS: pip install pyodps", file=sys.stderr)
         raise
     except Exception as e:
-        print(f"创建连接失败: {str(e)}")
+        import sys
+        print(f"创建连接失败: {str(e)}", file=sys.stderr)
         raise
 
 def test_connection(endpoint, project_name, access_id, access_key):
@@ -40,16 +43,18 @@ def test_connection(endpoint, project_name, access_id, access_key):
 
 def get_tables(endpoint, project_name, access_id, access_key):
     try:
-        print(f"尝试连接到: {endpoint}, 项目: {project_name}")
+        import sys
+        print(f"尝试连接到: {endpoint}, 项目: {project_name}", file=sys.stderr)
         odps = get_connection(endpoint, project_name, access_id, access_key)
-        print("连接成功，正在获取表列表...")
+        print("连接成功，正在获取表列表...", file=sys.stderr)
         tables = list(odps.list_tables())
-        print(f"找到 {len(tables)} 个表")
+        print(f"找到 {len(tables)} 个表", file=sys.stderr)
         return {'success': True, 'data': [{'name': t.name, 'schema': 'default'} for t in tables]}
     except Exception as e:
-        print(f"获取表列表失败: {str(e)}")
+        import sys
+        print(f"获取表列表失败: {str(e)}", file=sys.stderr)
         import traceback
-        traceback.print_exc()
+        traceback.print_exc(file=sys.stderr)
         return {'success': True, 'data': []}
 
 def get_table_meta(endpoint, project_name, access_id, access_key, table_name):
@@ -119,6 +124,7 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     
+    import sys
     try:
         if args.action == 'test_connection':
             result = test_connection(args.endpoint, args.project, args.access_id, args.access_key)
@@ -131,9 +137,12 @@ if __name__ == '__main__':
         elif args.action == 'get_table_data':
             result = get_table_data(args.endpoint, args.project, args.access_id, args.access_key, args.table_name, args.limit, args.offset)
         
-        print(json.dumps(result))
+        # 只有 JSON 结果输出到 stdout，所有其他输出到 stderr
+        print(json.dumps(result), file=sys.stdout)
+        sys.stdout.flush()
     except Exception as e:
-        print(json.dumps({'success': False, 'message': str(e)}))
+        print(json.dumps({'success': False, 'message': str(e)}), file=sys.stdout)
+        sys.stdout.flush()
 `;
 
 const PYODPS_SCRIPT_PATH = path.join(__dirname, 'pyodps_runner.py');

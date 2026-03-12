@@ -317,9 +317,13 @@ export default function App() {
             
             const result = await response.json();
             
-            if (result.code === 0 && result.data) {
+            if (result.code === 0 && Array.isArray(result.data)) {
                 setTables(result.data);
-                message.success(`成功获取 ${result.data.length} 个表`);
+                if (result.data.length > 0) {
+                    message.success(`成功获取 ${result.data.length} 个表`);
+                } else {
+                    message.info("该数据源下没有可用的表");
+                }
             } else {
                 message.error(result.message || "获取表列表失败");
             }

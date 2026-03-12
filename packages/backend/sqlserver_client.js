@@ -173,6 +173,8 @@ class SqlServerClient {
    */
   async getTables() {
     try {
+      console.log('正在获取 SQL Server 表列表...');
+      
       const query = `
         SELECT 
           TABLE_SCHEMA AS tableSchema,
@@ -183,13 +185,19 @@ class SqlServerClient {
       `;
       
       const tables = await this.executeQuery(query);
-      return tables.map(table => ({
+      console.log(`SQL Server 查询到 ${tables.length} 个表`);
+      
+      const result = tables.map(table => ({
         name: table.name,
         schema: table.tableSchema || 'dbo'
       }));
+      
+      console.log('返回的表列表:', result);
+      return result;
     } catch (error) {
       console.error('获取 SQL Server 表列表失败:', error);
-      throw error;
+      // 失败时返回空数组而不是抛出错误
+      return [];
     }
   }
 
