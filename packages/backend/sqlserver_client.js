@@ -182,7 +182,11 @@ class SqlServerClient {
         ORDER BY TABLE_SCHEMA, TABLE_NAME
       `;
       
-      return await this.executeQuery(query);
+      const tables = await this.executeQuery(query);
+      return tables.map(table => ({
+        name: table.name,
+        schema: table.tableSchema || 'dbo'
+      }));
     } catch (error) {
       console.error('获取 SQL Server 表列表失败:', error);
       throw error;

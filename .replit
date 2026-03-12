@@ -2,9 +2,9 @@
 
 language = "javascript"
 
-run = "npm start"
+run = "npm run deploy:replit"
 
-build = "npm run build"
+build = "npm run install:all:replit && npm run build"
 
 entrypoint = "packages/backend/index.js"
 
@@ -14,8 +14,8 @@ modules = ["nodejs-20", "web", "nix"]
 channel = "stable-25_05"
 
 [deployment]
-build = ["npm", "run", "build"]
-run = ["npm", "start"]
+build = ["bash", "-c", "npm run install:all:replit && npm run build"]
+run = ["bash", "-c", "npm run deploy:replit"]
 deploymentTarget = "gce"
 
 [[ports]]

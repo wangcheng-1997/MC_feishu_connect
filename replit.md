@@ -13,6 +13,7 @@ A data connector that synchronizes data from Alibaba Cloud MaxCompute and SQL Se
 
 - **Frontend**: React 18, TypeScript, Ant Design, Vite, `@lark-base-open/connector-api`
 - **Backend**: Node.js, Express, `mssql`, `odbc`, `axios`
+- **MaxCompute**: Python 3.11 + Official PyODPS SDK (Alibaba Cloud official SDK)
 
 ## Running
 

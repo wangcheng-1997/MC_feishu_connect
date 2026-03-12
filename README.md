@@ -37,9 +37,16 @@ MC_feishu_connect/
 
 ### 前置要求
 
+#### 通用要求
 - Node.js >= 20.0.0
 - Python >= 3.6
 - PyODPS: `pip install pyodps`
+
+#### Replit 部署
+Replit 会自动配置环境，无需手动安装。配置文件已包含：
+- Python 3.11 运行环境
+- PyODPS 依赖自动安装
+- 完整的构建和部署流程
 
 ### 安装依赖
 
