@@ -12,7 +12,8 @@
     "build": "npm run build --workspace=packages/frontend",
     "start": "node packages/backend/index.js",
     "install:all": "npm install --workspaces",
-    "deploy": "npm run install:all && npm run build && npm start"
+    "install:pyodps": "pip install pyodps",
+    "deploy": "npm run install:all && pip install pyodps && npm run build && npm start"
   },
   "keywords": [
     "feishu",
@@ -23,6 +24,12 @@
   "author": "",
   "license": "ISC",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.0.0",
+    "python": ">=3.6"
+  },
+  "requirements": {
+    "python_packages": [
+      "pyodps"
+    ]
   }
 }

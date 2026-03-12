@@ -35,10 +35,17 @@ MC_feishu_connect/
 
 ## 快速开始
 
+### 前置要求
+
+- Node.js >= 20.0.0
+- Python >= 3.6
+- PyODPS: `pip install pyodps`
+
 ### 安装依赖
 
 ```bash
 npm run install:all
+pip install pyodps
 ```
 
 ### 开发模式
@@ -76,6 +83,8 @@ npm start
 
 ## MaxCompute 配置说明
 
+> **注意**：项目使用官方 Python SDK (PyODPS) 进行连接，请确保已安装：`pip install pyodps`
+
 ### Endpoint 配置
 
 MaxCompute Endpoint 是访问 MaxCompute 服务的接入点。根据官方文档，支持三种网络类型：
@@ -103,11 +112,10 @@ MaxCompute Endpoint 是访问 MaxCompute 服务的接入点。根据官方文档
 
 ### 使用方式
 
-#### 方式一：直接指定 Endpoint
-
 ```javascript
-const { MaxComputeClient } = require('./maxcompute_client.js');
+const { MaxComputeClient, getEndpoint } = require('./maxcompute_client.js');
 
+// 方式一：直接指定 Endpoint
 const client = new MaxComputeClient({
   accessId: 'your-access-id',
   accessKey: 'your-access-key',
@@ -115,14 +123,8 @@ const client = new MaxComputeClient({
   projectName: 'your-project-name',
   schemaName: 'default'
 });
-```
 
-#### 方式二：使用区域和网络类型自动生成 Endpoint
-
-```javascript
-const { MaxComputeClient, getEndpoint } = require('./maxcompute_client.js');
-
-// 自动生成 Endpoint
+// 方式二：使用区域和网络类型自动生成 Endpoint
 const endpoint = getEndpoint('cn-hangzhou', 'public'); // 或 'vpc', 'intranet'
 
 const client = new MaxComputeClient({
@@ -142,6 +144,25 @@ const client = new MaxComputeClient({
 - 美洲区域：us-west-1 (硅谷), us-east-1 (弗吉尼亚)
 
 更多详细信息请参考官方文档：https://help.aliyun.com/zh/maxcompute/user-guide/endpoints
+
+## 故障排查
+
+常见问题：
+- **连接失败**：检查 Python 和 PyODPS 是否正确安装，运行 `pip show pyodps`
+- **权限错误**：检查 AccessKey 权限是否足够
+- **项目不存在**：检查项目名称和 Endpoint 区域是否正确
+- **连接超时**：检查网络连接和防火墙设置
+
+### 测试 PyODPS
+
+```bash
+python -c "from odps import ODPS; print('PyODPS OK')"
+```
+
+### 官方文档
+
+- MaxCompute 官方文档：https://help.aliyun.com/zh/maxcompute/
+- PyODPS 文档：https://help.aliyun.com/zh/maxcompute/user-guide/faq-about-pyodps
 
 ## API 端点
 
