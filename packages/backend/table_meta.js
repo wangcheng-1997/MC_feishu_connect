@@ -21,15 +21,41 @@ async function getTableMetaFromMaxCompute(config) {
   try {
     const client = new MaxComputeClient(config);
     
-    // 获取 MaxCompute 表元数据
-    const tableMeta = await client.getTableMeta(config.tableName);
+    let columns = [];
+    let tableName = config.tableName;
     
-    // 提取列信息
-    const columns = tableMeta.Table.Columns || [];
+    // 如果提供了自定义 SQL，执行 SQL 获取结果结构
+    if (config.sql) {
+      // 执行 SQL 获取前 0 条记录，只获取结构
+      const data = await client.executeSQL(`SELECT * FROM (${config.sql}) t LIMIT 0`);
+      
+      if (data && data.length > 0) {
+        // 从第一条记录的键获取列名
+        const firstRow = data[0];
+        columns = Object.keys(firstRow).map(key => ({
+          Name: key,
+          Type: 'STRING',
+          Comment: ''
+        }));
+      } else {
+        // 如果没有数据，尝试解析 SQL 中的表名
+        const tableMatch = config.sql.match(/FROM\s+([a-zA-Z0-9_]+)/i);
+        if (tableMatch && tableMatch[1]) {
+          const tableMeta = await client.getTableMeta(tableMatch[1]);
+          columns = tableMeta.Table.Columns || [];
+        }
+      }
+      
+      tableName = tableName || 'SQL 查询结果';
+    } else if (config.tableName) {
+      // 否则获取指定表的元数据
+      const tableMeta = await client.getTableMeta(config.tableName);
+      columns = tableMeta.Table.Columns || [];
+    }
     
     // 转换为飞书多维表格格式
     return generateTableMeta(
-      config.tableName,
+      tableName,
       columns,
       config.primaryField
     );

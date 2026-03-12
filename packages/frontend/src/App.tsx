@@ -546,8 +546,13 @@ export default function App() {
                     <Form.Item
                         label="表名"
                         name="tableName"
-                        rules={[{ required: true, message: "请选择表名" }]}
-                        tooltip="要同步的表名"
+                        rules={[
+                            {
+                                required: false,
+                                message: "请选择表名",
+                            }
+                        ]}
+                        tooltip="要同步的表名，可选，也可以直接填写自定义 SQL"
                     >
                         <Select
                             showSearch
