@@ -1,6 +1,5 @@
 /**
  * MaxCompute 数据类型与飞书多维表格字段类型映射适配器
- * 根据 MaxCompute 官方文档支持的数据类型
  */
 
 // MaxCompute 数据类型到飞书多维表格字段类型的映射
@@ -9,7 +8,6 @@ const ODPS_TO_LARK_TYPE_MAP = {
   'STRING': 1,      // 文本
   'VARCHAR': 1,     // 文本
   'CHAR': 1,        // 文本
-  'BINARY': 1,      // 文本（二进制数据转为文本）
   
   // 数值类型
   'TINYINT': 2,     // 数字
@@ -28,11 +26,6 @@ const ODPS_TO_LARK_TYPE_MAP = {
   
   // 布尔类型
   'BOOLEAN': 7,     // 复选框
-  
-  // 复杂类型（映射为文本）
-  'ARRAY': 1,       // 文本
-  'MAP': 1,         // 文本
-  'STRUCT': 1,      // 文本
 };
 
 // 字段类型名称映射（用于展示）

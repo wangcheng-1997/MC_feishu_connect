@@ -2,22 +2,102 @@ const axios = require('axios');
 const crypto = require('crypto');
 
 /**
+ * MaxCompute Endpoint 配置
+ * 根据官方文档 https://help.aliyun.com/zh/maxcompute/user-guide/endpoints
+ */
+const ENDPOINT_CONFIG = {
+  // 公网 Endpoint
+  public: {
+    'cn-hangzhou': 'https://service.cn-hangzhou.maxcompute.aliyun.com/api',
+    'cn-shanghai': 'https://service.cn-shanghai.maxcompute.aliyun.com/api',
+    'cn-beijing': 'https://service.cn-beijing.maxcompute.aliyun.com/api',
+    'cn-zhangjiakou': 'https://service.cn-zhangjiakou.maxcompute.aliyun.com/api',
+    'cn-wulanchabu': 'https://service.cn-wulanchabu.maxcompute.aliyun.com/api',
+    'cn-shenzhen': 'https://service.cn-shenzhen.maxcompute.aliyun.com/api',
+    'cn-chengdu': 'https://service.cn-chengdu.maxcompute.aliyun.com/api',
+    'cn-hongkong': 'https://service.cn-hongkong.maxcompute.aliyun.com/api',
+    'ap-southeast-1': 'https://service.ap-southeast-1.maxcompute.aliyun.com/api',
+    'ap-northeast-1': 'https://service.ap-northeast-1.maxcompute.aliyun.com/api',
+    'eu-central-1': 'https://service.eu-central-1.maxcompute.aliyun.com/api',
+    'us-west-1': 'https://service.us-west-1.maxcompute.aliyun.com/api',
+    'us-east-1': 'https://service.us-east-1.maxcompute.aliyun.com/api',
+  },
+  // VPC Endpoint
+  vpc: {
+    'cn-hangzhou': 'https://service.cn-hangzhou-vpc.maxcompute.aliyun-inc.com/api',
+    'cn-shanghai': 'https://service.cn-shanghai-vpc.maxcompute.aliyun-inc.com/api',
+    'cn-beijing': 'https://service.cn-beijing-vpc.maxcompute.aliyun-inc.com/api',
+    'cn-zhangjiakou': 'https://service.cn-zhangjiakou-vpc.maxcompute.aliyun-inc.com/api',
+    'cn-wulanchabu': 'https://service.cn-wulanchabu-vpc.maxcompute.aliyun-inc.com/api',
+    'cn-shenzhen': 'https://service.cn-shenzhen-vpc.maxcompute.aliyun-inc.com/api',
+    'cn-chengdu': 'https://service.cn-chengdu-vpc.maxcompute.aliyun-inc.com/api',
+    'cn-hongkong': 'https://service.cn-hongkong-vpc.maxcompute.aliyun-inc.com/api',
+    'ap-southeast-1': 'https://service.ap-southeast-1-vpc.maxcompute.aliyun-inc.com/api',
+    'ap-northeast-1': 'https://service.ap-northeast-1-vpc.maxcompute.aliyun-inc.com/api',
+    'eu-central-1': 'https://service.eu-central-1-vpc.maxcompute.aliyun-inc.com/api',
+    'us-west-1': 'https://service.us-west-1-vpc.maxcompute.aliyun-inc.com/api',
+    'us-east-1': 'https://service.us-east-1-vpc.maxcompute.aliyun-inc.com/api',
+  },
+  // 云产品互联 Endpoint
+  intranet: {
+    'cn-hangzhou': 'https://service.cn-hangzhou-intranet.maxcompute.aliyun-inc.com/api',
+    'cn-shanghai': 'https://service.cn-shanghai-intranet.maxcompute.aliyun-inc.com/api',
+    'cn-beijing': 'https://service.cn-beijing-intranet.maxcompute.aliyun-inc.com/api',
+    'cn-zhangjiakou': 'https://service.cn-zhangjiakou-intranet.maxcompute.aliyun-inc.com/api',
+    'cn-wulanchabu': 'https://service.cn-wulanchabu-intranet.maxcompute.aliyun-inc.com/api',
+    'cn-shenzhen': 'https://service.cn-shenzhen-intranet.maxcompute.aliyun-inc.com/api',
+    'cn-chengdu': 'https://service.cn-chengdu-intranet.maxcompute.aliyun-inc.com/api',
+    'cn-hongkong': 'https://service.cn-hongkong-intranet.maxcompute.aliyun-inc.com/api',
+    'ap-southeast-1': 'https://service.ap-southeast-1-intranet.maxcompute.aliyun-inc.com/api',
+    'ap-northeast-1': 'https://service.ap-northeast-1-intranet.maxcompute.aliyun-inc.com/api',
+    'eu-central-1': 'https://service.eu-central-1-intranet.maxcompute.aliyun-inc.com/api',
+    'us-west-1': 'https://service.us-west-1-intranet.maxcompute.aliyun-inc.com/api',
+    'us-east-1': 'https://service.us-east-1-intranet.maxcompute.aliyun-inc.com/api',
+  },
+};
+
+/**
+ * 获取 Endpoint
+ * @param {string} region - 区域代码，如 'cn-hangzhou'
+ * @param {string} networkType - 网络类型: 'public' (公网), 'vpc' (VPC), 'intranet' (云产品互联)
+ * @returns {string} Endpoint URL
+ */
+function getEndpoint(region, networkType = 'public') {
+  const endpoints = ENDPOINT_CONFIG[networkType];
+  if (!endpoints) {
+    throw new Error(`不支持的网络类型: ${networkType}，支持的网络类型: public, vpc, intranet`);
+  }
+  
+  const endpoint = endpoints[region];
+  if (!endpoint) {
+    throw new Error(`不支持的区域: ${region}，请参考官方文档: https://help.aliyun.com/zh/maxcompute/user-guide/endpoints`);
+  }
+  
+  return endpoint;
+}
+
+/**
  * MaxCompute 客户端
  * 支持通过 MaxCompute Tunnel 和 REST API 获取数据
+ * 官方文档: https://help.aliyun.com/zh/maxcompute/
  */
 class MaxComputeClient {
   constructor(config) {
     this.accessId = config.accessId;
     this.accessKey = config.accessKey;
-    this.endpoint = config.endpoint; // 如: http://service.cn.maxcompute.aliyun.com/api
+    this.endpoint = config.endpoint; // 如: https://service.cn-hangzhou.maxcompute.aliyun.com/api (公网) 或 https://service.cn-hangzhou-vpc.maxcompute.aliyun-inc.com/api (VPC)
     this.projectName = config.projectName;
     this.schemaName = config.schemaName || 'default';
+    this.region = config.region || this._extractRegionFromEndpoint(config.endpoint);
+  }
+
+  _extractRegionFromEndpoint(endpoint) {
+    const match = endpoint.match(/service\.([a-z0-9-]+)\.maxcompute/);
+    return match ? match[1].replace('-vpc', '').replace('-intranet', '') : 'cn-hangzhou';
   }
 
   /**
    * 计算 MaxCompute 签名
-   * 根据 MaxCompute 官方文档规范
-   * 签名字符串格式: HTTP-Verb + "\n" + Content-MD5 + "\n" + Content-Type + "\n" + Date + "\n" + CanonicalizedODPSResource
    */
   _sign(method, path, date, contentType = '', contentMd5 = '') {
     const stringToSign = `${method}\n${contentMd5}\n${contentType}\n${date}\n${path}`;
@@ -34,7 +114,6 @@ class MaxComputeClient {
 
   /**
    * 获取请求头
-   * 根据 MaxCompute 官方文档规范设置请求头
    */
   _getHeaders(method, path, body = '') {
     const date = new Date().toUTCString();
@@ -44,17 +123,14 @@ class MaxComputeClient {
     
     if (method === 'POST' && body) {
       contentType = 'application/json';
-      contentMd5 = crypto.createHash('md5').update(body).digest('base64');
+        contentMd5 = crypto.createHash('md5').update(body).digest('base64');
     }
     
     const headers = {
       'Date': date,
       'x-odps-project-name': this.projectName,
+      'x-odps-schema-name': this.schemaName,
     };
-    
-    if (this.schemaName && this.schemaName !== 'default') {
-      headers['x-odps-schema-name'] = this.schemaName;
-    }
     
     if (contentType) {
       headers['Content-Type'] = contentType;
@@ -71,10 +147,10 @@ class MaxComputeClient {
 
   /**
    * 执行 SQL 查询
-   * 根据 MaxCompute 官方文档规范提交 SQL 任务
    */
   async executeSQL(sql) {
     try {
+      // MaxCompute SQL 任务提交
       const path = `/projects/${this.projectName}/instances`;
       const url = `${this.endpoint}${path}`;
       
@@ -92,8 +168,9 @@ class MaxComputeClient {
       const headers = this._getHeaders('POST', path, body);
       
       const response = await axios.post(url, body, { headers });
-      const instanceId = response.data.Instance.InstanceId;
+      const instanceId = response.data.InstanceId;
 
+      // 等待任务完成并获取结果
       return await this._waitForInstance(instanceId);
     } catch (error) {
       console.error('MaxCompute SQL 执行失败:', error.message);
@@ -103,7 +180,6 @@ class MaxComputeClient {
 
   /**
    * 等待实例完成
-   * 根据 MaxCompute 官方文档规范轮询任务状态
    */
   async _waitForInstance(instanceId, maxRetries = 60) {
     const path = `/projects/${this.projectName}/instances/${instanceId}`;
@@ -116,14 +192,13 @@ class MaxComputeClient {
       const status = response.data.Instance.Status;
       
       if (status === 'Terminated') {
+        // 获取结果
         return await this._getInstanceResult(instanceId);
       } else if (status === 'Failed') {
-        const message = response.data.Instance.Message || '未知错误';
-        throw new Error(`任务执行失败: ${message}`);
-      } else if (status === 'Cancelled') {
-        throw new Error('任务被取消');
+        throw new Error(`任务执行失败: ${response.data.Instance.Message}`);
       }
 
+      // 等待 2 秒后重试
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
@@ -132,30 +207,20 @@ class MaxComputeClient {
 
   /**
    * 获取实例结果
-   * 根据 MaxCompute 官方文档规范获取查询结果
    */
   async _getInstanceResult(instanceId) {
-    const path = `/projects/${this.projectName}/instances/${instanceId}`;
+    // 通过 Tunnel 获取结果
+    const path = `/projects/${this.projectName}/instances/${instanceId}/results`;
     const url = `${this.endpoint}${path}`;
     
     const headers = this._getHeaders('GET', path);
     const response = await axios.get(url, { headers });
-    
-    const instance = response.data.Instance;
-    
-    if (instance.Result && instance.Result.Rows) {
-      return {
-        Rows: instance.Result.Rows,
-        Columns: instance.Result.Columns || [],
-      };
-    }
     
     return response.data;
   }
 
   /**
    * 获取表的元数据
-   * 根据 MaxCompute 官方文档规范获取表结构
    */
   async getTableMeta(tableName) {
     try {
@@ -174,24 +239,10 @@ class MaxComputeClient {
 
   /**
    * 获取表数据（通过 SQL）
-   * 注意：MaxCompute SQL 不支持 OFFSET 语法，需要使用其他方式分页
    */
   async getTableData(tableName, limit = 1000, offset = 0) {
-    let sql;
-    if (offset > 0) {
-      sql = `SELECT * FROM ${tableName} LIMIT ${offset + limit}`;
-      const result = await this.executeSQL(sql);
-      if (result.Rows && result.Rows.length > offset) {
-        return {
-          Rows: result.Rows.slice(offset),
-          Columns: result.Columns || [],
-        };
-      }
-      return { Rows: [], Columns: result.Columns || [] };
-    } else {
-      sql = `SELECT * FROM ${tableName} LIMIT ${limit}`;
-      return await this.executeSQL(sql);
-    }
+    const sql = `SELECT * FROM ${tableName} LIMIT ${limit} OFFSET ${offset}`;
+    return await this.executeSQL(sql);
   }
 
   /**
@@ -232,8 +283,31 @@ class MaxComputeClient {
   }
 
   /**
+   * 验证配置
+   */
+  _validateConfig() {
+    if (!this.accessId) {
+      throw new Error('AccessKey ID 不能为空');
+    }
+    if (!this.accessKey) {
+      throw new Error('AccessKey Secret 不能为空');
+    }
+    if (!this.endpoint) {
+      throw new Error('Endpoint 不能为空');
+    }
+    if (!this.projectName) {
+      throw new Error('项目名称不能为空');
+    }
+    
+    // 验证 endpoint 格式
+    if (!this.endpoint.match(/^https?:\/\/service\.[a-z0-9-]+\.maxcompute/)) {
+      throw new Error('Endpoint 格式不正确，应为: https://service.{region}.maxcompute.aliyun.com/api');
+    }
+  }
+
+  /**
    * 测试连接
-   * 根据 MaxCompute 官方文档规范验证连接
+   * 尝试获取项目信息来验证连接
    */
   async testConnection() {
     try {
@@ -242,9 +316,14 @@ class MaxComputeClient {
         accessId: this.accessId,
         endpoint: this.endpoint,
         projectName: this.projectName,
-        schemaName: this.schemaName
+        schemaName: this.schemaName,
+        region: this.region
       });
       
+      // 验证配置
+      this._validateConfig();
+      
+      // 尝试获取项目信息来验证连接
       const path = `/projects/${this.projectName}`;
       const url = `${this.endpoint}${path}`;
       
@@ -267,6 +346,7 @@ class MaxComputeClient {
             projectName: this.projectName,
             schemaName: this.schemaName,
             endpoint: this.endpoint,
+            region: this.region,
           },
         };
       }
@@ -280,13 +360,14 @@ class MaxComputeClient {
       console.error('错误详情:', error);
       
       if (error.response) {
-        console.error('响应状态:', error.response.status);
-        console.error('响应数据:', JSON.stringify(error.response.data, null, 2));
-        console.error('响应头:', JSON.stringify(error.response.headers, null, 2));
+        console.error('响应状态:', error.response.response?.status);
+        console.error('响应数据:', JSON.stringify(error.response.response?.data, null, 2));
+        console.error('响应头:', JSON.stringify(error.response.response?.headers, null, 2));
       }
       
       let errorMessage = '连接失败';
       if (error.response) {
+        // 服务器返回了错误响应
         switch (error.response.status) {
           case 401:
             errorMessage = '认证失败，请检查 AccessKey ID 和 AccessKey Secret';
@@ -327,4 +408,4 @@ class MaxComputeClient {
   }
 }
 
-module.exports = { MaxComputeClient };
+module.exports = { MaxComputeClient, getEndpoint, ENDPOINT_CONFIG };

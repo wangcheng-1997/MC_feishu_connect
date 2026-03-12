@@ -74,6 +74,75 @@ npm start
 - 请求签名验证
 - 跨域支持
 
+## MaxCompute 配置说明
+
+### Endpoint 配置
+
+MaxCompute Endpoint 是访问 MaxCompute 服务的接入点。根据官方文档，支持三种网络类型：
+
+#### 1. 公网 Endpoint
+适用于从阿里云外部（如办公电脑）访问 MaxCompute。
+
+示例：
+- 华东1（杭州）: `https://service.cn-hangzhou.maxcompute.aliyun.com/api`
+- 华东2（上海）: `https://service.cn-shanghai.maxcompute.aliyun.com/api`
+- 华北2（北京）: `https://service.cn-beijing.maxcompute.aliyun.com/api`
+
+#### 2. VPC Endpoint
+适用于从阿里云内部（如 ECS 实例）访问 MaxCompute，更安全且稳定。
+
+示例：
+- 华东1（杭州）: `https://service.cn-hangzhou-vpc.maxcompute.aliyun-inc.com/api`
+- 华东2（上海）: `https://service.cn-shanghai-vpc.maxcompute.aliyun-inc.com/api`
+
+#### 3. 云产品互联 Endpoint
+适用于从阿里云产品互联网络访问 MaxCompute（如从 Quick BI 连接）。
+
+示例：
+- 华东1（杭州）: `https://service.cn-hangzhou-intranet.maxcompute.aliyun-inc.com/api`
+
+### 使用方式
+
+#### 方式一：直接指定 Endpoint
+
+```javascript
+const { MaxComputeClient } = require('./maxcompute_client.js');
+
+const client = new MaxComputeClient({
+  accessId: 'your-access-id',
+  accessKey: 'your-access-key',
+  endpoint: 'https://service.cn-hangzhou.maxcompute.aliyun.com/api',
+  projectName: 'your-project-name',
+  schemaName: 'default'
+});
+```
+
+#### 方式二：使用区域和网络类型自动生成 Endpoint
+
+```javascript
+const { MaxComputeClient, getEndpoint } = require('./maxcompute_client.js');
+
+// 自动生成 Endpoint
+const endpoint = getEndpoint('cn-hangzhou', 'public'); // 或 'vpc', 'intranet'
+
+const client = new MaxComputeClient({
+  accessId: 'your-access-id',
+  accessKey: 'your-access-key',
+  endpoint: endpoint,
+  projectName: 'your-project-name',
+  schemaName: 'default'
+});
+```
+
+### 支持的区域
+
+- 中国区域：cn-hangzhou, cn-shanghai, cn-beijing, cn-zhangjiakou, cn-wulanchabu, cn-shenzhen, cn-chengdu, cn-hongkong
+- 亚太区域：ap-southeast-1 (新加坡), ap-northeast-1 (东京)
+- 欧洲区域：eu-central-1 (法兰克福)
+- 美洲区域：us-west-1 (硅谷), us-east-1 (弗吉尼亚)
+
+更多详细信息请参考官方文档：https://help.aliyun.com/zh/maxcompute/user-guide/endpoints
+
 ## API 端点
 
 - `GET /` - 服务状态检查

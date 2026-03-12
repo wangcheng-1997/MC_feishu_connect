@@ -7,7 +7,9 @@ const { generateTableRecords, generateTableMeta } = require('./maxcompute_adapte
  * @param {Object} config - MaxCompute 连接配置
  * @param {string} config.accessId - 阿里云 AccessKey ID
  * @param {string} config.accessKey - 阿里云 AccessKey Secret
- * @param {string} config.endpoint - MaxCompute 服务端点
+ * @param {string} config.endpoint - MaxCompute 服务端点，如: https://service.cn-hangzhou.maxcompute.aliyun.com/api
+ * @param {string} config.region - 区域代码（可选），如: cn-hangzhou
+ * @param {string} config.networkType - 网络类型（可选）: 'public' (公网), 'vpc' (VPC), 'intranet' (云产品互联)
  * @param {string} config.projectName - MaxCompute 项目名称
  * @param {string} config.tableName - 要同步的表名
  * @param {string} config.schemaName - Schema 名称（可选）
@@ -23,21 +25,24 @@ async function getTableRecordsFromMaxCompute(config, fields) {
     
     let data;
     
+    // 如果提供了自定义 SQL，则执行自定义查询
     if (config.sql) {
       data = await client.executeSQL(config.sql);
     } else {
+      // 否则查询整个表
       const limit = config.limit || 1000;
       const offset = config.offset || 0;
       data = await client.getTableData(config.tableName, limit, offset);
     }
     
-    const rows = data.Rows || [];
-    const hasMore = rows.length >= (config.limit || 1000);
+    // 转换数据格式
+    const hasMore = data.length >= (config.limit || 1000);
     const nextPageToken = hasMore ? String((config.offset || 0) + (config.limit || 1000)) : '';
     
-    return generateTableRecords(rows, fields, hasMore, nextPageToken);
+    return generateTableRecords(data, fields, hasMore, nextPageToken);
   } catch (error) {
     console.error('获取 MaxCompute 表记录失败:', error);
+    // 返回默认数据作为 fallback
     return getDefaultTableRecords();
   }
 }

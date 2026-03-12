@@ -8,7 +8,9 @@ const { generateTableMeta } = require('./maxcompute_adapter.js');
  * @param {Object} config - MaxCompute 连接配置
  * @param {string} config.accessId - 阿里云 AccessKey ID
  * @param {string} config.accessKey - 阿里云 AccessKey Secret
- * @param {string} config.endpoint - MaxCompute 服务端点
+ * @param {string} config.endpoint - MaxCompute 服务端点，如: https://service.cn-hangzhou.maxcompute.aliyun.com/api
+ * @param {string} config.region - 区域代码（可选），如: cn-hangzhou
+ * @param {string} config.networkType - 网络类型（可选）: 'public' (公网), 'vpc' (VPC), 'intranet' (云产品互联)
  * @param {string} config.projectName - MaxCompute 项目名称
  * @param {string} config.tableName - 要同步的表名
  * @param {string} config.schemaName - Schema 名称（可选）
@@ -19,10 +21,13 @@ async function getTableMetaFromMaxCompute(config) {
   try {
     const client = new MaxComputeClient(config);
     
+    // 获取 MaxCompute 表元数据
     const tableMeta = await client.getTableMeta(config.tableName);
     
-    const columns = tableMeta.Table?.Columns || [];
+    // 提取列信息
+    const columns = tableMeta.Table.Columns || [];
     
+    // 转换为飞书多维表格格式
     return generateTableMeta(
       config.tableName,
       columns,
@@ -30,6 +35,7 @@ async function getTableMetaFromMaxCompute(config) {
     );
   } catch (error) {
     console.error('获取 MaxCompute 表元数据失败:', error);
+    // 返回默认元数据作为 fallback
     return getDefaultTableMeta();
   }
 }

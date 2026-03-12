@@ -52,60 +52,72 @@ interface SqlServerConfig {
 
 const ENDPOINT_OPTIONS = [
     {
-        value: "http://service.cn.maxcompute.aliyun.com/api",
-        label: "阿里云中国站 (cn)",
+        value: "https://service.cn-hangzhou.maxcompute.aliyun.com/api",
+        label: "华东1 (杭州) - 公网",
     },
     {
-        value: "http://service.cn-beijing.maxcompute.aliyun.com/api",
-        label: "华北2 (北京)",
+        value: "https://service.cn-shanghai.maxcompute.aliyun.com/api",
+        label: "华东2 (上海) - 公网",
     },
     {
-        value: "http://service.cn-shanghai.maxcompute.aliyun.com/api",
-        label: "华东2 (上海)",
+        value: "https://service.cn-beijing.maxcompute.aliyun.com/api",
+        label: "华北2 (北京) - 公网",
     },
     {
-        value: "http://service.cn-hangzhou.maxcompute.aliyun.com/api",
-        label: "华东1 (杭州)",
+        value: "https://service.cn-zhangjiakou.maxcompute.aliyun.com/api",
+        label: "华北3 (张家口) - 公网",
     },
     {
-        value: "http://service.cn-shenzhen.maxcompute.aliyun.com/api",
-        label: "华南1 (深圳)",
+        value: "https://service.cn-wulanchabu.maxcompute.aliyun.com/api",
+        label: "华北6 (乌兰察布) - 公网",
     },
     {
-        value: "http://service.cn-qingdao.maxcompute.aliyun.com/api",
-        label: "华北1 (青岛)",
+        value: "https://service.cn-shenzhen.maxcompute.aliyun.com/api",
+        label: "华南1 (深圳) - 公网",
     },
     {
-        value: "http://service.cn-zhangjiakou.maxcompute.aliyun.com/api",
-        label: "华北3 (张家口)",
+        value: "https://service.cn-chengdu.maxcompute.aliyun.com/api",
+        label: "西南1 (成都) - 公网",
     },
     {
-        value: "http://service.cn-huhehaote.maxcompute.aliyun.com/api",
-        label: "华北5 (呼和浩特)",
+        value: "https://service.cn-hongkong.maxcompute.aliyun.com/api",
+        label: "中国香港 - 公网",
     },
     {
-        value: "http://service.cn-chengdu.maxcompute.aliyun.com/api",
-        label: "西南1 (成都)",
+        value: "https://service.ap-southeast-1.maxcompute.aliyun.com/api",
+        label: "新加坡 - 公网",
     },
     {
-        value: "http://service.cn-hongkong.maxcompute.aliyun.com/api",
-        label: "香港",
+        value: "https://service.ap-northeast-1.maxcompute.aliyun.com/api",
+        label: "日本 (东京) - 公网",
     },
     {
-        value: "http://service.ap-southeast-1.maxcompute.aliyun.com/api",
-        label: "新加坡",
+        value: "https://service.eu-central-1.maxcompute.aliyun.com/api",
+        label: "德国 (法兰克福) - 公网",
     },
     {
-        value: "http://service.us-west-1.maxcompute.aliyun.com/api",
-        label: "美国 (硅谷)",
+        value: "https://service.us-west-1.maxcompute.aliyun.com/api",
+        label: "美国 (硅谷) - 公网",
     },
     {
-        value: "http://service.us-east-1.maxcompute.aliyun.com/api",
-        label: "美国 (弗吉尼亚)",
+        value: "https://service.us-east-1.maxcompute.aliyun.com/api",
+        label: "美国 (弗吉尼亚) - 公网",
     },
     {
-        value: "http://service.eu-central-1.maxcompute.aliyun.com/api",
-        label: "德国 (法兰克福)",
+        value: "https://service.cn-hangzhou-vpc.maxcompute.aliyun-inc.com/api",
+        label: "华东1 (杭州) - VPC",
+    },
+    {
+        value: "https://service.cn-shanghai-vpc.maxcompute.aliyun-inc.com/api",
+        label: "华东2 (上海) - VPC",
+    },
+    {
+        value: "https://service.cn-beijing-vpc.maxcompute.aliyun-inc.com/api",
+        label: "华北2 (北京) - VPC",
+    },
+    {
+        value: "https://service.cn-hangzhou-intranet.maxcompute.aliyun-inc.com/api",
+        label: "华东1 (杭州) - 云产品互联",
     },
 ];
 
@@ -395,8 +407,8 @@ export default function App() {
                                         message: "请选择服务端点",
                                     },
                                 ]}
-                                tooltip="MaxCompute 服务所在的地域端点"
-                                initialValue="http://service.cn.maxcompute.aliyun.com/api"
+                                tooltip="MaxCompute 服务所在的地域端点，根据官方文档更新"
+                                initialValue="https://service.cn-hangzhou.maxcompute.aliyun.com/api"
                             >
                                 <Select
                                     options={ENDPOINT_OPTIONS}
