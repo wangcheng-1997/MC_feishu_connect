@@ -151,7 +151,7 @@ function runPyOdps(action, config) {
 
     console.log('执行 PyODPS:', action, config.tableName || config.sql || '');
 
-    const python = process.platform === 'win32' ? 'python' : 'python3';
+    const python = process.env.REPLIT ? 'python3.11' : (process.platform === 'win32' ? 'python' : 'python3');
     const proc = spawn(python, args, {
       cwd: __dirname
     });

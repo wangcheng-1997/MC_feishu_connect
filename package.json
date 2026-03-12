@@ -12,8 +12,8 @@
     "build": "npm run build --workspace=packages/frontend",
     "start": "node packages/backend/index.js",
     "install:all": "npm install --workspaces",
-    "install:pyodps": "pip install --user pyodps",
-    "install:all:replit": "npm install --workspaces && pip install --user pyodps",
+    "install:pyodps": "python3 -m pip install --user pyodps || python -m pip install --user pyodps || pip install --user pyodps",
+    "install:all:replit": "npm install --workspaces && (python3 -m pip install --user pyodps || python -m pip install --user pyodps || pip install --user pyodps)",
     "deploy": "npm run install:all && pip install pyodps && npm run build && npm start",
     "deploy:replit": "npm run install:all:replit && npm run build && npm start"
   },

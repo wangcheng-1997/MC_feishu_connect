@@ -8,7 +8,7 @@ build = "npm run install:all:replit && npm run build"
 
 entrypoint = "packages/backend/index.js"
 
-modules = ["nodejs-20", "web", "nix"]
+modules = ["nodejs-20", "python-3.11", "web", "nix"]
 
 [nix]
 channel = "stable-25_05"
