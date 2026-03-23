@@ -35,11 +35,8 @@ function validateRequestSignature(req, res, next) {
         
         next();
     } catch (error) {
-        console.error(JSON.stringify({
-            type: 'signature_validation_error',
-            message: error.message,
-            timestamp: new Date().toISOString()
-        }));
+        console.error('签名验证错误:', error.message);
+        console.error('错误堆栈:', error.stack);
         return res.status(500).json({ code: 500, message: '签名验证服务异常' });
     }
 }
@@ -420,7 +417,7 @@ app.post("/api/sqlserver_tables", validateRequestSignature, async (req, res) => 
 /**
  * 获取 MaxCompute 表列表接口（兼容旧版本）
  */
-app.post("/api/maxcompute_tables", async (req, res) => {
+app.post("/api/maxcompute_tables", validateRequestSignature, async (req, res) => {
     console.log("maxcompute_tables 的请求数据", req.body);
 
     try {

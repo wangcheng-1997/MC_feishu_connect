@@ -30,7 +30,7 @@ function judgeEncryptSignValid(req) {
   console.log("  body:", body);
   console.log("  body type:", typeof body);
 
-  // 如果没有设置秘钥，则跳过验证
+  // 当没有设置秘钥时，默认跳过验证，以提供向后兼容性
   if (!secretKey) {
     console.log("未设置请求签名秘钥，跳过签名验证");
     return true;
