@@ -16,14 +16,19 @@ function getSecretKey() {
 function judgeEncryptSignValid(req) {
   const headers = req.headers;
   const body = req.body;
-  const nonce = headers["x-base-request-nonce"];
-  const timestamp = headers["x-base-request-timestamp"];
-  const sig = headers["x-base-signature"];
+  
+  // 兼容不同大小写的 header 名称
+  const nonce = headers["x-base-request-nonce"] || headers["X-Base-Request-Nonce"];
+  const timestamp = headers["x-base-request-timestamp"] || headers["X-Base-Request-Timestamp"];
+  const sig = headers["x-base-signature"] || headers["X-Base-Signature"];
 
+  console.log("收到请求的所有 header keys:", Object.keys(headers));
   console.log("收到请求的header:");
-  console.log("x-base-request-timestamp:", headers["x-base-request-timestamp"]);
-  console.log("  x-base-request-nonce:", headers["x-base-request-nonce"]);
-  console.log("  x-base-signature:", headers["x-base-signature"]);
+  console.log("x-base-request-timestamp:", timestamp);
+  console.log("  x-base-request-nonce:", nonce);
+  console.log("  x-base-signature:", sig);
+  console.log("  body:", body);
+  console.log("  body type:", typeof body);
 
   // 如果没有设置秘钥，则跳过验证
   if (!secretKey) {
@@ -36,12 +41,24 @@ function judgeEncryptSignValid(req) {
     return false;
   }
   
-  // 拼接字符串
-  const str = timestamp + nonce + secretKey + JSON.stringify(body);
+  // 处理 body 格式 - 飞书可能发送原始 JSON 字符串
+  let bodyStr;
+  if (typeof body === 'string') {
+    bodyStr = body;
+  } else if (body) {
+    bodyStr = JSON.stringify(body);
+  } else {
+    bodyStr = '';
+  }
+  
+  // 拼接字符串（按照官方文档顺序：timestamp + nonce + secretKey + body）
+  const str = timestamp + nonce + secretKey + bodyStr;
+  console.log("签名字符串:", str);
+  
   // 创建SHA-1加密实例
   const sha1 = crypto.createHash("sha1");
   // 更新要加密的数据
-  sha1.update(str);
+  sha1.update(str, "utf8");
   // 计算加密结果
   const encryptedStr = sha1.digest("hex");
   // 比较加密结果

@@ -35,7 +35,11 @@ function validateRequestSignature(req, res, next) {
         
         next();
     } catch (error) {
-        console.error('签名验证异常:', error.message);
+        console.error(JSON.stringify({
+            type: 'signature_validation_error',
+            message: error.message,
+            timestamp: new Date().toISOString()
+        }));
         return res.status(500).json({ code: 500, message: '签名验证服务异常' });
     }
 }
