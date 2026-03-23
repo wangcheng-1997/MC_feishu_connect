@@ -263,8 +263,9 @@ app.get("/health", (req, res) => {
 /**
  * 测试连接接口
  * 支持 MaxCompute 和 SQL Server
+ * 前端配置页面调用，不需要签名验证
  */
-app.post("/api/test_connection", validateRequestSignature, async (req, res) => {
+app.post("/api/test_connection", async (req, res) => {
     console.log("test_connection 的请求数据", req.body);
 
     try {
@@ -300,8 +301,9 @@ app.post("/api/test_connection", validateRequestSignature, async (req, res) => {
 
 /**
  * 测试 SQL Server 连接接口（兼容旧版本）
+ * 前端配置页面调用，不需要签名验证
  */
-app.post("/api/test_sqlserver_connection", validateRequestSignature, async (req, res) => {
+app.post("/api/test_sqlserver_connection", async (req, res) => {
     console.log("test_sqlserver_connection 的请求数据", req.body);
 
     try {
@@ -331,8 +333,9 @@ app.post("/api/test_sqlserver_connection", validateRequestSignature, async (req,
 /**
  * 获取表列表接口
  * 支持 MaxCompute 和 SQL Server
+ * 前端配置页面调用，不需要签名验证
  */
-app.post("/api/tables", validateRequestSignature, async (req, res) => {
+app.post("/api/tables", async (req, res) => {
     console.log("tables 的请求数据", req.body);
 
     try {
@@ -383,8 +386,9 @@ app.post("/api/tables", validateRequestSignature, async (req, res) => {
 
 /**
  * 获取 SQL Server 表列表接口（兼容旧版本）
+ * 前端配置页面调用，不需要签名验证
  */
-app.post("/api/sqlserver_tables", validateRequestSignature, async (req, res) => {
+app.post("/api/sqlserver_tables", async (req, res) => {
     console.log("sqlserver_tables 的请求数据", req.body);
 
     try {
@@ -423,8 +427,9 @@ app.post("/api/sqlserver_tables", validateRequestSignature, async (req, res) => 
 
 /**
  * 获取 MaxCompute 表列表接口（兼容旧版本）
+ * 前端配置页面调用，不需要签名验证
  */
-app.post("/api/maxcompute_tables", validateRequestSignature, async (req, res) => {
+app.post("/api/maxcompute_tables", async (req, res) => {
     console.log("maxcompute_tables 的请求数据", req.body);
 
     try {

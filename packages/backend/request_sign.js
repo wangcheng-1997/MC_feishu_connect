@@ -36,11 +36,11 @@ function judgeEncryptSignValid(req) {
     return true;
   }
 
-  // 如果请求头中没有签名相关信息，说明是前端配置页面直接调用，跳过验证
+  // 必须要有完整的签名信息才能通过验证
   // 飞书平台调用会自动添加这些签名头
   if (!sig || !timestamp || !nonce) {
-    console.log("请求头中缺少签名信息，可能是前端配置页面直接调用，跳过签名验证");
-    return true;
+    console.log("请求头中缺少签名信息，验证失败");
+    return false;
   }
   
   // 处理 body 格式 - 飞书可能发送原始 JSON 字符串
