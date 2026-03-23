@@ -114,7 +114,12 @@ function parseLarkParams(body) {
 app.post("/api/table_meta", async (req, res) => {
     console.log("========== table_meta 请求 ==========");
     console.log("请求体 keys:", Object.keys(req.body));
-    console.log("加密判断结果：", judgeEncryptSignValid(req));
+    const isValid = judgeEncryptSignValid(req);
+    console.log("加密判断结果：", isValid);
+    
+    if (!isValid) {
+        return res.status(401).json({ code: 401, message: '签名验证失败' });
+    }
 
     try {
         let data;
@@ -173,7 +178,12 @@ app.post("/api/table_meta", async (req, res) => {
 app.post("/api/records", async (req, res) => {
     console.log("========== records 请求 ==========");
     console.log("请求体 keys:", Object.keys(req.body));
-    console.log("加密判断结果：", judgeEncryptSignValid(req));
+    const isValid = judgeEncryptSignValid(req);
+    console.log("加密判断结果：", isValid);
+    
+    if (!isValid) {
+        return res.status(401).json({ code: 401, message: '签名验证失败' });
+    }
 
     try {
         let data;
@@ -240,6 +250,12 @@ app.get("/health", (req, res) => {
  */
 app.post("/api/test_connection", async (req, res) => {
     console.log("test_connection 的请求数据", req.body);
+    const isValid = judgeEncryptSignValid(req);
+    console.log("加密判断结果：", isValid);
+    
+    if (!isValid) {
+        return res.status(401).json({ code: 401, message: '签名验证失败' });
+    }
 
     try {
         // 正确处理请求数据格式
@@ -277,6 +293,12 @@ app.post("/api/test_connection", async (req, res) => {
  */
 app.post("/api/test_sqlserver_connection", async (req, res) => {
     console.log("test_sqlserver_connection 的请求数据", req.body);
+    const isValid = judgeEncryptSignValid(req);
+    console.log("加密判断结果：", isValid);
+    
+    if (!isValid) {
+        return res.status(401).json({ code: 401, message: '签名验证失败' });
+    }
 
     try {
         const dataSource = await DataSourceFactory.createDataSource({ sqlserver: req.body });
@@ -308,6 +330,12 @@ app.post("/api/test_sqlserver_connection", async (req, res) => {
  */
 app.post("/api/tables", async (req, res) => {
     console.log("tables 的请求数据", req.body);
+    const isValid = judgeEncryptSignValid(req);
+    console.log("加密判断结果：", isValid);
+    
+    if (!isValid) {
+        return res.status(401).json({ code: 401, message: '签名验证失败' });
+    }
 
     try {
         // 尝试从缓存获取
@@ -360,6 +388,12 @@ app.post("/api/tables", async (req, res) => {
  */
 app.post("/api/sqlserver_tables", async (req, res) => {
     console.log("sqlserver_tables 的请求数据", req.body);
+    const isValid = judgeEncryptSignValid(req);
+    console.log("加密判断结果：", isValid);
+    
+    if (!isValid) {
+        return res.status(401).json({ code: 401, message: '签名验证失败' });
+    }
 
     try {
         // 尝试从缓存获取
