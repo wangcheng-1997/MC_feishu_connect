@@ -25,14 +25,19 @@ if (process.env.REQUEST_SIGN_SECRET) {
  * 验证飞书请求签名，验证失败直接返回 401
  */
 function validateRequestSignature(req, res, next) {
-    const isValid = judgeEncryptSignValid(req);
-    console.log("加密判断结果：", isValid);
-    
-    if (!isValid) {
-        return res.status(401).json({ code: 401, message: '签名验证失败' });
+    try {
+        const isValid = judgeEncryptSignValid(req);
+        console.log("加密判断结果：", isValid);
+        
+        if (!isValid) {
+            return res.status(401).json({ code: 401, message: '签名验证失败' });
+        }
+        
+        next();
+    } catch (error) {
+        console.error('签名验证异常:', error);
+        return res.status(500).json({ code: 500, message: '签名验证服务异常' });
     }
-    
-    next();
 }
 
 const app = express();
