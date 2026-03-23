@@ -26,6 +26,13 @@ if (process.env.REQUEST_SIGN_SECRET) {
  */
 function validateRequestSignature(req, res, next) {
     try {
+        console.log("========== 收到请求 ==========");
+        console.log("方法:", req.method);
+        console.log("路径:", req.path);
+        console.log("Headers:", JSON.stringify(req.headers, null, 2));
+        console.log("Body:", JSON.stringify(req.body, null, 2));
+        console.log("==============================");
+        
         const isValid = judgeEncryptSignValid(req);
         console.log("加密判断结果：", isValid);
         
