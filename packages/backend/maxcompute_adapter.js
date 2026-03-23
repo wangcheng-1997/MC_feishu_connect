@@ -98,7 +98,7 @@ function getFieldProperty(odpsType, odpsColumn) {
     case 'DATETIME':
     case 'TIMESTAMP':
       return {
-        formatter: 'yyyy/MM/dd HH:mm:ss',
+        formatter: 'yyyy/MM/dd HH:mm',
       };
     
     default:
