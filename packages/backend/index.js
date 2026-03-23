@@ -20,6 +20,21 @@ if (process.env.REQUEST_SIGN_SECRET) {
     console.log("未设置 REQUEST_SIGN_SECRET 环境变量，跳过签名验证");
 }
 
+/**
+ * 请求签名验证中间件
+ * 验证飞书请求签名，验证失败直接返回 401
+ */
+function validateRequestSignature(req, res, next) {
+    const isValid = judgeEncryptSignValid(req);
+    console.log("加密判断结果：", isValid);
+    
+    if (!isValid) {
+        return res.status(401).json({ code: 401, message: '签名验证失败' });
+    }
+    
+    next();
+}
+
 const app = express();
 
 // 跨域支持
@@ -111,15 +126,9 @@ function parseLarkParams(body) {
  * 获取表元数据接口
  * 支持 MaxCompute 和 SQL Server
  */
-app.post("/api/table_meta", async (req, res) => {
+app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
     console.log("========== table_meta 请求 ==========");
     console.log("请求体 keys:", Object.keys(req.body));
-    const isValid = judgeEncryptSignValid(req);
-    console.log("加密判断结果：", isValid);
-    
-    if (!isValid) {
-        return res.status(401).json({ code: 401, message: '签名验证失败' });
-    }
 
     try {
         let data;
@@ -175,15 +184,9 @@ app.post("/api/table_meta", async (req, res) => {
  * 获取表记录数据接口
  * 支持 MaxCompute 和 SQL Server
  */
-app.post("/api/records", async (req, res) => {
+app.post("/api/records", validateRequestSignature, async (req, res) => {
     console.log("========== records 请求 ==========");
     console.log("请求体 keys:", Object.keys(req.body));
-    const isValid = judgeEncryptSignValid(req);
-    console.log("加密判断结果：", isValid);
-    
-    if (!isValid) {
-        return res.status(401).json({ code: 401, message: '签名验证失败' });
-    }
 
     try {
         let data;
@@ -248,14 +251,8 @@ app.get("/health", (req, res) => {
  * 测试连接接口
  * 支持 MaxCompute 和 SQL Server
  */
-app.post("/api/test_connection", async (req, res) => {
+app.post("/api/test_connection", validateRequestSignature, async (req, res) => {
     console.log("test_connection 的请求数据", req.body);
-    const isValid = judgeEncryptSignValid(req);
-    console.log("加密判断结果：", isValid);
-    
-    if (!isValid) {
-        return res.status(401).json({ code: 401, message: '签名验证失败' });
-    }
 
     try {
         // 正确处理请求数据格式
@@ -291,14 +288,8 @@ app.post("/api/test_connection", async (req, res) => {
 /**
  * 测试 SQL Server 连接接口（兼容旧版本）
  */
-app.post("/api/test_sqlserver_connection", async (req, res) => {
+app.post("/api/test_sqlserver_connection", validateRequestSignature, async (req, res) => {
     console.log("test_sqlserver_connection 的请求数据", req.body);
-    const isValid = judgeEncryptSignValid(req);
-    console.log("加密判断结果：", isValid);
-    
-    if (!isValid) {
-        return res.status(401).json({ code: 401, message: '签名验证失败' });
-    }
 
     try {
         const dataSource = await DataSourceFactory.createDataSource({ sqlserver: req.body });
@@ -328,14 +319,8 @@ app.post("/api/test_sqlserver_connection", async (req, res) => {
  * 获取表列表接口
  * 支持 MaxCompute 和 SQL Server
  */
-app.post("/api/tables", async (req, res) => {
+app.post("/api/tables", validateRequestSignature, async (req, res) => {
     console.log("tables 的请求数据", req.body);
-    const isValid = judgeEncryptSignValid(req);
-    console.log("加密判断结果：", isValid);
-    
-    if (!isValid) {
-        return res.status(401).json({ code: 401, message: '签名验证失败' });
-    }
 
     try {
         // 尝试从缓存获取
@@ -386,14 +371,8 @@ app.post("/api/tables", async (req, res) => {
 /**
  * 获取 SQL Server 表列表接口（兼容旧版本）
  */
-app.post("/api/sqlserver_tables", async (req, res) => {
+app.post("/api/sqlserver_tables", validateRequestSignature, async (req, res) => {
     console.log("sqlserver_tables 的请求数据", req.body);
-    const isValid = judgeEncryptSignValid(req);
-    console.log("加密判断结果：", isValid);
-    
-    if (!isValid) {
-        return res.status(401).json({ code: 401, message: '签名验证失败' });
-    }
 
     try {
         // 尝试从缓存获取
