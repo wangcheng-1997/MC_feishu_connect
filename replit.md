@@ -43,8 +43,17 @@ Backend listens on port **5000** (or `$PORT`).
 - `POST /api/sqlserver/records` — Fetch SQL Server records
 - `POST /api/sqlserver/tables` — List SQL Server tables
 
+## Environment Variables
+
+Set these in the Replit "Secrets" tab:
+
+- `REQUEST_SIGN_SECRET` - Request signature verification secret key (required by Feishu Base)
+  - If not set, signature verification is skipped
+  - Get this from your Feishu Base connector configuration
+
 ## Notes
 
 - The frontend is a Feishu connector and is designed to run inside the Feishu Base environment
 - The UI will appear blank outside the Feishu context as it relies on the Lark SDK
 - TypeScript compilation step (`tsc -b`) was removed from build script since vite.config is `.js`
+- MaxCompute requires Python 3.11+ and PyODPS, which is automatically installed in Replit

@@ -4,13 +4,21 @@ const fs = require("fs");
 
 const DataSourceFactory = require("./data_source_factory.js");
 const cacheManager = require("./cache_manager.js");
-const { judgeEncryptSignValid } = require("./request_sign.js");
+const { judgeEncryptSignValid, setSecretKey } = require("./request_sign.js");
 const { getTableMeta } = require("./table_meta.js");
 const { getTableRecords } = require("./table_records.js");
 const {
     getSqlServerTableMeta,
     getSqlServerTableRecords,
 } = require("./sqlserver_handler.js");
+
+// 从环境变量读取请求签名秘钥
+if (process.env.REQUEST_SIGN_SECRET) {
+    setSecretKey(process.env.REQUEST_SIGN_SECRET);
+    console.log("已加载请求签名秘钥");
+} else {
+    console.log("未设置 REQUEST_SIGN_SECRET 环境变量，跳过签名验证");
+}
 
 const app = express();
 
