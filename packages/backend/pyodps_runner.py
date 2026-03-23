@@ -6,7 +6,6 @@ import traceback
 
 def get_connection(endpoint, project_name, access_id, access_key):
     try:
-        import sys
         print("正在导入 PyODPS...", file=sys.stderr)
         from odps import ODPS
         print("PyODPS 导入成功", file=sys.stderr)
@@ -20,12 +19,10 @@ def get_connection(endpoint, project_name, access_id, access_key):
         print("ODPS 实例创建成功", file=sys.stderr)
         return odps
     except ImportError as e:
-        import sys
         print(f"PyODPS 导入失败: {str(e)}", file=sys.stderr)
         print("请安装 PyODPS: pip install pyodps", file=sys.stderr)
         raise
     except Exception as e:
-        import sys
         print(f"创建连接失败: {str(e)}", file=sys.stderr)
         raise
 
@@ -39,7 +36,6 @@ def test_connection(endpoint, project_name, access_id, access_key):
 
 def get_tables(endpoint, project_name, access_id, access_key):
     try:
-        import sys
         print(f"尝试连接到: {endpoint}, 项目: {project_name}", file=sys.stderr)
         odps = get_connection(endpoint, project_name, access_id, access_key)
         print("连接成功，正在获取表列表...", file=sys.stderr)
@@ -47,11 +43,10 @@ def get_tables(endpoint, project_name, access_id, access_key):
         print(f"找到 {len(tables)} 个表", file=sys.stderr)
         return {'success': True, 'data': [{'name': t.name, 'schema': 'default'} for t in tables]}
     except Exception as e:
-        import sys
         print(f"获取表列表失败: {str(e)}", file=sys.stderr)
         import traceback
         traceback.print_exc(file=sys.stderr)
-        return {'success': True, 'data': []}
+        return {'success': False, 'message': str(e)}
 
 def get_table_meta(endpoint, project_name, access_id, access_key, table_name):
     try:
@@ -103,6 +98,9 @@ def execute_sql(endpoint, project_name, access_id, access_key, sql, limit=1000):
         return {'success': False, 'message': str(e)}
 
 def get_table_data(endpoint, project_name, access_id, access_key, table_name, limit=1000, offset=0):
+    import re
+    if not re.match(r'^[a-zA-Z0-9_.-]+$', table_name):
+        return {'success': False, 'message': f'表名包含非法字符: {table_name}'}
     sql = f"SELECT * FROM {table_name} LIMIT {limit} OFFSET {offset}"
     return execute_sql(endpoint, project_name, access_id, access_key, sql, limit)
 
@@ -120,7 +118,6 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     
-    import sys
     try:
         if args.action == 'test_connection':
             result = test_connection(args.endpoint, args.project, args.access_id, args.access_key)
