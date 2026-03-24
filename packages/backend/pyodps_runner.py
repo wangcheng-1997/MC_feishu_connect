@@ -3,6 +3,7 @@ import sys
 import json
 import argparse
 import traceback
+import datetime
 
 def get_connection(endpoint, project_name, access_id, access_key):
     try:
@@ -89,7 +90,13 @@ def execute_sql(endpoint, project_name, access_id, access_key, sql, limit=1000):
                     break
                 record_dict = {}
                 for i, col in enumerate(schema.columns):
-                    record_dict[col.name] = str(record[i]) if record[i] is not None else None
+                    val = record[i]
+                    if val is None:
+                        record_dict[col.name] = None
+                    elif isinstance(val, (datetime.datetime, datetime.date)):
+                        record_dict[col.name] = val.strftime("%Y-%m-%d %H:%M:%S")
+                    else:
+                        record_dict[col.name] = str(val)
                 records.append(record_dict)
                 row_count += 1
         
