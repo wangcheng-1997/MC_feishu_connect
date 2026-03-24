@@ -12,18 +12,23 @@
 set -e
 
 # 检查参数
+echo ">>> 参数个数: $#"
+echo ">>> 参数1: $1"
+echo ">>> 参数2: $2"
+echo ">>> 参数3: $3"
+
 if [ $# -eq 2 ]; then
     # 子域名方式
     DOMAIN=$1
     SECRET_KEY=$2
     SUBPATH=""
-    IS_SUBPATH=false
+    IS_SUBPATH=0
 elif [ $# -eq 3 ]; then
     # 子路径方式
     DOMAIN=$1
     SUBPATH=$2
     SECRET_KEY=$3
-    IS_SUBPATH=true
+    IS_SUBPATH=1
 else
     echo "Usage:"
     echo "  1. 子域名方式：sudo bash deploy-aliyun.sh <your-domain> <your-secret-key>"
@@ -36,8 +41,8 @@ fi
 DEPLOY_DIR=/home/ubuntu/MC_feishu_connect
 
 # 确保 SUBPATH 不以 / 开头和结尾
-if [ "$IS_SUBPATH" = true ]; then
-    SUBPATH_CLEAN=$(echo "$SUBPATH" | sed 's/^\/\//' | sed 's/\/$//')
+if [ $IS_SUBPATH -eq 1 ]; then
+    SUBPATH_CLEAN=$(echo "$SUBPATH" | sed 's/^[/]*//' | sed 's/[/]*$//')
 fi
 
 echo "===================================================="
@@ -71,7 +76,7 @@ pip3 install pyodps
 # 克隆代码
 echo ">>> 克隆代码..."
 if [ ! -d "$DEPLOY_DIR" ]; then
-    git clone https://github.com/KianWang/MC_feishu_connect.git "$DEPLOY_DIR"
+    git clone https://github.com/wangcheng-1997/MC_feishu_connect.git "$DEPLOY_DIR"
 fi
 
 cd "$DEPLOY_DIR"
@@ -127,11 +132,21 @@ server {
 EOF
 
 # 根据是否子路径添加不同 location
-if [ "$IS_SUBPATH" = true ]; then
+if [ $IS_SUBPATH -eq 1 ]; then
 cat >> /etc/nginx/sites-available/feishu-connector << EOF
     # 所有 /$SUBPATH_CLEAN 开头的请求代理到后端
-    location ~ ^/$SUBPATH_CLEAN(/.*)?$ {
+    location ~ ^/$SUBPATH_CLEAN(/.*)\$ {
         proxy_pass http://127.0.0.1:5000\$1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_connect_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+    # 处理 /$SUBPATH_CLEAN 根路径
+    location = /$SUBPATH_CLEAN {
+        proxy_pass http://127.0.0.1:5000/;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -160,7 +175,7 @@ fi
 # 启用配置
 echo ">>> 启用 Nginx 配置..."
 ln -sf /etc/nginx/sites-available/feishu-connector /etc/nginx/sites-enabled/
-if [ "$IS_SUBPATH" != true ]; then
+if [ $IS_SUBPATH -ne 1 ]; then
     rm -f /etc/nginx/sites-enabled/default
 fi
 nginx -t
@@ -180,7 +195,7 @@ echo "✅ 部署完成！"
 echo "===================================================="
 echo
 echo "服务信息:"
-if [ "$IS_SUBPATH" = true ]; then
+if [ $IS_SUBPATH -eq 1 ]; then
 echo "  访问地址: https://$DOMAIN/$SUBPATH_CLEAN"
 echo "  健康检查: https://$DOMAIN/$SUBPATH_CLEAN/health"
 else
@@ -191,7 +206,7 @@ echo "  PM2 状态: pm2 status"
 echo "  PM2 日志: pm2 logs mc-feishu-connect"
 echo
 echo "飞书配置:"
-if [ "$IS_SUBPATH" = true ]; then
+if [ $IS_SUBPATH -eq 1 ]; then
 echo "  服务地址: https://$DOMAIN/$SUBPATH_CLEAN"
 echo "  Verification Token: $SECRET_KEY"
 echo "  dataSourceConfigUiUri: /$SUBPATH_CLEAN/"
