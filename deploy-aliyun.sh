@@ -134,9 +134,10 @@ EOF
 # 根据是否子路径添加不同 location
 if [ $IS_SUBPATH -eq 1 ]; then
 cat >> /etc/nginx/sites-available/feishu-connector << EOF
-    # 所有 /$SUBPATH_CLEAN 开头的请求代理到后端
-    location ~ ^/$SUBPATH_CLEAN(/.*)\$ {
-        proxy_pass http://127.0.0.1:5000\$1;
+    # 所有 /$SUBPATH_CLEAN/ 开头的请求代理到后端
+    location ^~ /$SUBPATH_CLEAN/ {
+        rewrite ^/$SUBPATH_CLEAN(/.*)\$ \$1 break;
+        proxy_pass http://127.0.0.1:5000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -144,13 +145,10 @@ cat >> /etc/nginx/sites-available/feishu-connector << EOF
         proxy_connect_timeout 60s;
         proxy_read_timeout 60s;
     }
-    # 处理不带斜杠的根路径，跳转到带斜杠
-    location ^~ /$SUBPATH_CLEAN\$ {
-        return 301 /$SUBPATH_CLEAN/;
-    }
-    # 处理 /$SUBPATH_CLEAN/ 根路径
-    location = /$SUBPATH_CLEAN/ {
-        proxy_pass http://127.0.0.1:5000/;
+    # 所有 /$SUBPATH_CLEAN 开头的请求代理到后端（不带末尾斜杠）
+    location ^~ /$SUBPATH_CLEAN {
+        rewrite ^/$SUBPATH_CLEAN(/.*)\$ \$1 break;
+        proxy_pass http://127.0.0.1:5000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -179,9 +177,7 @@ fi
 # 启用配置
 echo ">>> 启用 Nginx 配置..."
 ln -sf /etc/nginx/sites-available/feishu-connector /etc/nginx/sites-enabled/
-if [ $IS_SUBPATH -ne 1 ]; then
-    rm -f /etc/nginx/sites-enabled/default
-fi
+rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl reload nginx
 
@@ -202,6 +198,10 @@ echo "服务信息:"
 if [ $IS_SUBPATH -eq 1 ]; then
 echo "  访问地址: https://$DOMAIN/$SUBPATH_CLEAN"
 echo "  健康检查: https://$DOMAIN/$SUBPATH_CLEAN/health"
+echo
+echo "⚠️  请记得："
+echo "  1. 将上面输出的 Nginx 配置添加到 /etc/nginx/sites-available/default"
+echo "  2. 执行 sudo nginx -t && sudo systemctl reload nginx"
 else
 echo "  域名: https://$DOMAIN"
 echo "  健康检查: https://$DOMAIN/health"
