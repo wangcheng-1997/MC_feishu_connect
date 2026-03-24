@@ -1,22 +1,44 @@
 #!/bin/bash
 #
 # MC Feishu Connect 阿里云一键部署脚本
-# Usage: sudo bash deploy-aliyun.sh <your-domain> <your-secret-key>
-# Example: sudo bash deploy-aliyun.sh connector.example.com my-secret-key
+# Usage: 
+#   1. 子域名方式：sudo bash deploy-aliyun.sh <your-domain> <your-secret-key>
+#      Example: sudo bash deploy-aliyun.sh feishu.example.com my-secret-key
+#   2. 子路径方式：sudo bash deploy-aliyun.sh <your-domain> <sub-path> <your-secret-key>
+#      Example: sudo bash deploy-aliyun.sh example.com feishu my-secret-key
 #
+
 
 set -e
 
 # 检查参数
-if [ $# -ne 2 ]; then
-    echo "Usage: sudo bash deploy-aliyun.sh <your-domain> <your-secret-key>"
-    echo "Example: sudo bash deploy-aliyun.sh connector.example.com my-secret-key"
+if [ $# -eq 2 ]; then
+    # 子域名方式
+    DOMAIN=$1
+    SECRET_KEY=$2
+    SUBPATH=""
+    IS_SUBPATH=false
+elif [ $# -eq 3 ]; then
+    # 子路径方式
+    DOMAIN=$1
+    SUBPATH=$2
+    SECRET_KEY=$3
+    IS_SUBPATH=true
+else
+    echo "Usage:"
+    echo "  1. 子域名方式：sudo bash deploy-aliyun.sh <your-domain> <your-secret-key>"
+    echo "     Example: sudo bash deploy-aliyun.sh feishu.example.com my-secret-key"
+    echo "  2. 子路径方式：sudo bash deploy-aliyun.sh <your-domain> <sub-path> <your-secret-key>"
+    echo "     Example: sudo bash deploy-aliyun.sh example.com feishu my-secret-key"
     exit 1
 fi
 
-DOMAIN=$1
-SECRET_KEY=$2
 DEPLOY_DIR=/home/ubuntu/MC_feishu_connect
+
+# 确保 SUBPATH 不以 / 开头和结尾
+if [ "$IS_SUBPATH" = true ]; then
+    SUBPATH_CLEAN=$(echo "$SUBPATH" | sed 's/^\/\//' | sed 's/\/$//')
+fi
 
 echo "===================================================="
 echo "MC Feishu Connect 一键部署开始"
@@ -102,6 +124,26 @@ server {
         root /var/www/html;
     }
 
+EOF
+
+# 根据是否子路径添加不同 location
+if [ "$IS_SUBPATH" = true ]; then
+cat >> /etc/nginx/sites-available/feishu-connector << EOF
+    # 所有 /$SUBPATH_CLEAN 开头的请求代理到后端
+    location ~ ^/$SUBPATH_CLEAN(/.*)?$ {
+        proxy_pass http://127.0.0.1:5000\$1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_connect_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+}
+EOF
+else
+cat >> /etc/nginx/sites-available/feishu-connector << EOF
+    # 根路径所有请求代理到后端
     location / {
         proxy_pass http://127.0.0.1:5000;
         proxy_set_header Host \$host;
@@ -113,11 +155,14 @@ server {
     }
 }
 EOF
+fi
 
 # 启用配置
 echo ">>> 启用 Nginx 配置..."
 ln -sf /etc/nginx/sites-available/feishu-connector /etc/nginx/sites-enabled/
-rm -f /etc/nginx/sites-enabled/default
+if [ "$IS_SUBPATH" != true ]; then
+    rm -f /etc/nginx/sites-enabled/default
+fi
 nginx -t
 systemctl reload nginx
 
@@ -135,16 +180,29 @@ echo "✅ 部署完成！"
 echo "===================================================="
 echo
 echo "服务信息:"
+if [ "$IS_SUBPATH" = true ]; then
+echo "  访问地址: https://$DOMAIN/$SUBPATH_CLEAN"
+echo "  健康检查: https://$DOMAIN/$SUBPATH_CLEAN/health"
+else
 echo "  域名: https://$DOMAIN"
 echo "  健康检查: https://$DOMAIN/health"
+fi
 echo "  PM2 状态: pm2 status"
 echo "  PM2 日志: pm2 logs mc-feishu-connect"
 echo
 echo "飞书配置:"
+if [ "$IS_SUBPATH" = true ]; then
+echo "  服务地址: https://$DOMAIN/$SUBPATH_CLEAN"
+echo "  Verification Token: $SECRET_KEY"
+echo "  dataSourceConfigUiUri: /$SUBPATH_CLEAN/"
+echo "  tableMeta uri: /$SUBPATH_CLEAN/api/table_meta"
+echo "  records uri: /$SUBPATH_CLEAN/api/records"
+else
 echo "  服务地址: https://$DOMAIN"
 echo "  Verification Token: $SECRET_KEY"
 echo "  dataSourceConfigUiUri: /"
 echo "  tableMeta uri: /api/table_meta"
 echo "  records uri: /api/records"
+fi
 echo
 echo "===================================================="
