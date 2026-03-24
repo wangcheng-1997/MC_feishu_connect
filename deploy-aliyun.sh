@@ -144,8 +144,12 @@ cat >> /etc/nginx/sites-available/feishu-connector << EOF
         proxy_connect_timeout 60s;
         proxy_read_timeout 60s;
     }
-    # 处理 /$SUBPATH_CLEAN 根路径
-    location = /$SUBPATH_CLEAN {
+    # 处理不带斜杠的根路径，跳转到带斜杠
+    location ^~ /$SUBPATH_CLEAN\$ {
+        return 301 /$SUBPATH_CLEAN/;
+    }
+    # 处理 /$SUBPATH_CLEAN/ 根路径
+    location = /$SUBPATH_CLEAN/ {
         proxy_pass http://127.0.0.1:5000/;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
