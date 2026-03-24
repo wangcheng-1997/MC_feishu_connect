@@ -40,7 +40,7 @@ apt install -y nodejs
 
 # 安装 PM2
 echo ">>> 安装 PM2..."
-npm install -y pm2 -g
+npm install pm2 -g
 
 # 安装 PyODPS
 echo ">>> 安装 PyODPS..."
@@ -141,7 +141,7 @@ systemctl reload nginx
 
 # 申请 SSL 证书
 echo ">>> 申请 SSL 证书..."
-certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m webmaster@"$DOMAIN"
+certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email
 
 # 重启 Nginx
 echo ">>> 重启 Nginx..."
