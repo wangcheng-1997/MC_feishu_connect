@@ -141,7 +141,7 @@ systemctl reload nginx
 
 # 申请 SSL 证书
 echo ">>> 申请 SSL 证书..."
-certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email
+certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m admin@"$DOMAIN"
 
 # 重启 Nginx
 echo ">>> 重启 Nginx..."
