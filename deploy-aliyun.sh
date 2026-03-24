@@ -89,7 +89,7 @@ pm2 start ecosystem.config.js
 pm2 save
 pm2 startup
 
-# 创建 Nginx 配置
+# 创建 Nginx 配置（只保留 HTTP，让 Certbot 验证）
 echo ">>> 创建 Nginx 配置..."
 cat > /etc/nginx/sites-available/feishu-connector << EOF
 server {
@@ -102,24 +102,6 @@ server {
         root /var/www/html;
     }
 
-    location / {
-        return 301 https://\$server_name\$request_uri;
-    }
-}
-
-server {
-    listen 443 ssl http2;
-    server_name $DOMAIN;
-
-    # SSL 证书位置（Certbot 会自动修改这里）
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-
-    # SSL 配置
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-
-    # 反向代理到本地 Node.js 服务
     location / {
         proxy_pass http://127.0.0.1:5000;
         proxy_set_header Host \$host;
@@ -139,9 +121,9 @@ rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl reload nginx
 
-# 申请 SSL 证书
+# 申请 SSL 证书（Certbot 会自动找到 Nginx 配置并添加 HTTPS）
 echo ">>> 申请 SSL 证书..."
-certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m admin@"$DOMAIN"
+certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m 18130304002@163.com
 
 # 重启 Nginx
 echo ">>> 重启 Nginx..."
