@@ -36,10 +36,6 @@ cleanup() {
     rm -f /etc/nginx/sites-available/feishu-connector
     rm -f /etc/nginx/sites-enabled/feishu-connector
 
-    # 删除 SSL 证书
-    echo ">>> 删除 SSL 证书..."
-    certbot delete --non-interactive --cert-name "$1" 2>/dev/null || true
-
     # 重载 Nginx
     echo ">>> 重载 Nginx..."
     nginx -t && systemctl reload nginx || true
@@ -255,9 +251,14 @@ rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl reload nginx
 
-# 申请 SSL 证书（Certbot 会自动找到 Nginx 配置并添加 HTTPS）
-echo ">>> 申请 SSL 证书..."
-certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m 18130304002@163.com
+# SSL 证书配置（跳过已存在的情况，避免速率限制）
+echo ">>> 配置 SSL 证书..."
+if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+    echo "    证书已存在，跳过申请"
+else
+    echo "    申请新证书..."
+    certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m 18130304002@163.com
+fi
 
 # 重启 Nginx
 echo ">>> 重启 Nginx..."
