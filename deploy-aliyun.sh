@@ -204,9 +204,9 @@ EOF
 # 根据是否子路径添加不同 location
 if [ $IS_SUBPATH -eq 1 ]; then
 cat >> /etc/nginx/sites-available/feishu-connector << EOF
-    # 精确匹配 /subpath（不带斜杠），重写为空字符串后转发
+    # 精确匹配 /subpath（不带斜杠），重定向到带斜杠的URL
     location = /$SUBPATH_CLEAN {
-        rewrite ^ $scheme://\$host\$request_uri/ permanent;
+        return 301 $scheme://\$host\$request_uri/;
     }
     # 精确匹配 /subpath/（带尾部斜杠），重写为 / 后转发
     location ^~ /$SUBPATH_CLEAN/ {
