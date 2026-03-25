@@ -11,6 +11,60 @@
 
 set -e
 
+# 清理函数
+cleanup() {
+    echo "===================================================="
+    echo "🧹 开始清理旧部署环境"
+    echo "===================================================="
+    echo
+
+    # 停止 PM2 进程
+    echo ">>> 停止 PM2 服务..."
+    pm2 stop mc-feishu-connect 2>/dev/null || true
+    pm2 delete mc-feishu-connect 2>/dev/null || true
+
+    # 删除部署目录
+    echo ">>> 删除部署目录..."
+    rm -rf /home/ubuntu/MC_feishu_connect
+
+    # 删除 PM2 配置
+    echo ">>> 删除 PM2 配置..."
+    rm -f /home/ubuntu/ecosystem.config.js
+
+    # 删除 Nginx 配置
+    echo ">>> 删除 Nginx 配置..."
+    rm -f /etc/nginx/sites-available/feishu-connector
+    rm -f /etc/nginx/sites-enabled/feishu-connector
+
+    # 删除 SSL 证书
+    echo ">>> 删除 SSL 证书..."
+    certbot delete --non-interactive --cert-name "$1" 2>/dev/null || true
+
+    # 重载 Nginx
+    echo ">>> 重载 Nginx..."
+    nginx -t && systemctl reload nginx || true
+
+    echo
+    echo "✅ 清理完成！"
+    echo "===================================================="
+    echo
+    echo "现在可以重新部署："
+    echo "  子域名方式：sudo bash deploy-aliyun.sh <your-domain> <your-secret-key>"
+    echo "  子路径方式：sudo bash deploy-aliyun.sh <your-domain> <sub-path> <your-secret-key>"
+    echo
+    exit 0
+}
+
+# 检查是否为清理模式
+if [ "$1" = "cleanup" ] || [ "$1" = "clean" ]; then
+    if [ -z "$2" ]; then
+        echo "Usage: sudo bash deploy-aliyun.sh cleanup <your-domain>"
+        echo "Example: sudo bash deploy-aliyun.sh cleanup feishu.example.com"
+        exit 1
+    fi
+    cleanup "$2"
+fi
+
 # 检查参数
 echo ">>> 参数个数: $#"
 echo ">>> 参数1: $1"
@@ -89,6 +143,22 @@ git pull
 echo ">>> 安装 NPM 依赖..."
 npm install
 
+# 动态修改配置文件以适应子路径部署
+echo ">>> 配置部署环境..."
+if [ $IS_SUBPATH -eq 1 ]; then
+    # 修改 meta.json 中的路径配置
+    sed -i "s|\"dataSourceConfigUiUri\": \"/\"|\"dataSourceConfigUiUri\": \"/$SUBPATH_CLEAN/\"|g" packages/backend/public/meta.json
+    sed -i "s|\"uri\": \"/api/table_meta\"|\"uri\": \"/$SUBPATH_CLEAN/api/table_meta\"|g" packages/backend/public/meta.json
+    sed -i "s|\"uri\": \"/api/records\"|\"uri\": \"/$SUBPATH_CLEAN/api/records\"|g" packages/backend/public/meta.json
+
+    # 修改 vite.config.js 中的 base 配置
+    sed -i "s|base: './'|base: '/$SUBPATH_CLEAN/'|g" packages/frontend/vite.config.js
+
+    echo "    子路径模式: /$SUBPATH_CLEAN"
+else
+    echo "    子域名模式"
+fi
+
 # 构建前端
 echo ">>> 构建前端..."
 npm run build
@@ -134,9 +204,13 @@ EOF
 # 根据是否子路径添加不同 location
 if [ $IS_SUBPATH -eq 1 ]; then
 cat >> /etc/nginx/sites-available/feishu-connector << EOF
-    # 所有 /$SUBPATH_CLEAN/ 开头的请求代理到后端
+    # 精确匹配 /subpath（不带斜杠），重写为空字符串后转发
+    location = /$SUBPATH_CLEAN {
+        rewrite ^ $scheme://\$host\$request_uri/ permanent;
+    }
+    # 精确匹配 /subpath/（带尾部斜杠），重写为 / 后转发
     location ^~ /$SUBPATH_CLEAN/ {
-        rewrite ^/$SUBPATH_CLEAN(/.*)\$ \$1 break;
+        rewrite ^/$SUBPATH_CLEAN/?(.*)\$ /\$1 break;
         proxy_pass http://127.0.0.1:5000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -145,9 +219,9 @@ cat >> /etc/nginx/sites-available/feishu-connector << EOF
         proxy_connect_timeout 60s;
         proxy_read_timeout 60s;
     }
-    # 所有 /$SUBPATH_CLEAN 开头的请求代理到后端（不带末尾斜杠）
+    # 处理 /subpathabc 等情况（不带斜杠的非精确匹配）
     location ^~ /$SUBPATH_CLEAN {
-        rewrite ^/$SUBPATH_CLEAN(/.*)\$ \$1 break;
+        rewrite ^/$SUBPATH_CLEAN(?:/(.*))?\$ /\$1 break;
         proxy_pass http://127.0.0.1:5000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -198,10 +272,6 @@ echo "服务信息:"
 if [ $IS_SUBPATH -eq 1 ]; then
 echo "  访问地址: https://$DOMAIN/$SUBPATH_CLEAN"
 echo "  健康检查: https://$DOMAIN/$SUBPATH_CLEAN/health"
-echo
-echo "⚠️  请记得："
-echo "  1. 将上面输出的 Nginx 配置添加到 /etc/nginx/sites-available/default"
-echo "  2. 执行 sudo nginx -t && sudo systemctl reload nginx"
 else
 echo "  域名: https://$DOMAIN"
 echo "  健康检查: https://$DOMAIN/health"
