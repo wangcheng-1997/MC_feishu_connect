@@ -210,7 +210,7 @@ cat >> /etc/nginx/sites-available/feishu-connector << EOF
     }
     # 精确匹配 /subpath/（带尾部斜杠），重写为 / 后转发
     location ^~ /$SUBPATH_CLEAN/ {
-        rewrite ^/$SUBPATH_CLEAN/?(.*)\$ /\$1 break;
+        rewrite ^/$SUBPATH_CLEAN(/.*)\$ /\$1 break;
         proxy_pass http://127.0.0.1:5000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -221,7 +221,7 @@ cat >> /etc/nginx/sites-available/feishu-connector << EOF
     }
     # 处理 /subpathabc 等情况（不带斜杠的非精确匹配）
     location ^~ /$SUBPATH_CLEAN {
-        rewrite ^/$SUBPATH_CLEAN(?:/(.*))?\$ /\$1 break;
+        rewrite ^/$SUBPATH_CLEAN(/.*)?\$ /\$1 break;
         proxy_pass http://127.0.0.1:5000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
