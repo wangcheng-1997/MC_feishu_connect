@@ -30,7 +30,9 @@ class CacheManager {
       schema || 'default'
     ];
     
-    return keyParts.filter(Boolean).join('|');
+    // 使用MD5哈希算法避免键碰撞
+    const crypto = require('crypto');
+    return crypto.createHash('md5').update(keyParts.filter(Boolean).join('|')).digest('hex');
   }
 
   /**

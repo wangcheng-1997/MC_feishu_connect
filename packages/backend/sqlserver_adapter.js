@@ -107,7 +107,7 @@ function getFieldProperty(sqlServerType, sqlServerColumn) {
     case 'MONEY':
     case 'SMALLMONEY':
       return {
-        formatter: '#,##0.0000',
+        formatter: '#,##0.00',
         currencyCode: 'CNY',
       };
     

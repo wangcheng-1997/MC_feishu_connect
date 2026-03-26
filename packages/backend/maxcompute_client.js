@@ -371,17 +371,45 @@ class PythonProcessManager {
   }
 
   async runCommand(command) {
-    return new Promise(async (resolve) => {
-      this.queue.push({ command, resolve });
+    return new Promise(async (resolve, reject) => {
+      // 添加超时控制
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('操作超时')), 30000);
+      });
+
+      // 创建任务
+      const task = {
+        command,
+        resolve: (result) => {
+          clearTimeout(timeoutId);
+          resolve(result);
+        }
+      };
+
+      this.queue.push(task);
+
+      // 超时定时器
+      const timeoutId = setTimeout(() => {
+        // 从队列中移除任务
+        const index = this.queue.indexOf(task);
+        if (index > -1) {
+          this.queue.splice(index, 1);
+        }
+        resolve({ success: false, message: '操作超时' });
+      }, 30000);
+
       try {
         await this._ensureProcess();
         this._processQueue();
       } catch (error) {
         console.error('启动进程失败:', error);
-        const task = this.queue.pop();
-        if (task) {
-          task.resolve({ success: false, message: error.message });
+        // 从队列中移除任务
+        const index = this.queue.indexOf(task);
+        if (index > -1) {
+          this.queue.splice(index, 1);
         }
+        clearTimeout(timeoutId);
+        resolve({ success: false, message: error.message });
       }
     });
   }
