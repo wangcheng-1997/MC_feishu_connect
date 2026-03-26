@@ -372,11 +372,6 @@ class PythonProcessManager {
 
   async runCommand(command) {
     return new Promise(async (resolve, reject) => {
-      // 添加超时控制
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('操作超时')), 30000);
-      });
-
       // 创建任务
       const task = {
         command,

@@ -30,9 +30,9 @@ class CacheManager {
       schema || 'default'
     ];
     
-    // 使用MD5哈希算法避免键碰撞
+    // 使用SHA-256哈希算法避免键碰撞，更安全
     const crypto = require('crypto');
-    return crypto.createHash('md5').update(keyParts.filter(Boolean).join('|')).digest('hex');
+    return crypto.createHash('sha256').update(keyParts.filter(Boolean).join('|')).digest('hex');
   }
 
   /**
