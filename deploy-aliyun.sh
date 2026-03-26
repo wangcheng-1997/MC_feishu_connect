@@ -251,10 +251,94 @@ rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl reload nginx
 
-# SSL 证书配置（跳过已存在的情况，避免速率限制）
+# 申请或更新 SSL 证书
 echo ">>> 配置 SSL 证书..."
 if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
-    echo "    证书已存在，跳过申请"
+    echo "    证书已存在，更新配置..."
+    # 强制更新 Nginx 配置以启用 HTTPS
+    certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m 18130304002@163.com
+    # 确保配置正确
+    if ! grep -q "listen 443 ssl" /etc/nginx/sites-available/feishu-connector; then
+        echo "    手动添加 HTTPS 配置..."
+        # 备份当前配置
+        cp /etc/nginx/sites-available/feishu-connector /etc/nginx/sites-available/feishu-connector.bak
+        # 创建完整的 HTTPS 配置
+        cat > /etc/nginx/sites-available/feishu-connector << EOF
+# HTTP 服务器（用于重定向到 HTTPS）
+server {
+    listen 80;
+    server_name $DOMAIN;
+    
+    # Let's Encrypt 验证
+    location ~ /.well-known/acme-challenge {
+        allow all;
+        root /var/www/html;
+    }
+    
+    # 重定向到 HTTPS
+    return 301 https://\$host\$request_uri;
+}
+
+# HTTPS 服务器
+server {
+    listen 443 ssl;
+    server_name $DOMAIN;
+    
+    # SSL 证书配置
+    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+EOF
+        if [ $IS_SUBPATH -eq 1 ]; then
+cat >> /etc/nginx/sites-available/feishu-connector << EOF
+    # 精确匹配 /subpath（不带斜杠），重定向到带斜杠的URL
+    location = /$SUBPATH_CLEAN {
+        return 301 https://\$host\$request_uri/;
+    }
+    # 精确匹配 /subpath/（带尾部斜杠），重写为 / 后转发
+    location ^~ /$SUBPATH_CLEAN/ {
+        rewrite ^/$SUBPATH_CLEAN(/.*)\$ /\$1 break;
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_connect_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+    # 处理 /subpathabc 等情况（不带斜杠的非精确匹配）
+    location ^~ /$SUBPATH_CLEAN {
+        rewrite ^/$SUBPATH_CLEAN(/.*)?\$ /\$1 break;
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_connect_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+}
+EOF
+        else
+cat >> /etc/nginx/sites-available/feishu-connector << EOF
+    # 根路径所有请求代理到后端
+    location / {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_connect_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+}
+EOF
+        fi
+    fi
 else
     echo "    申请新证书..."
     certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m 18130304002@163.com
