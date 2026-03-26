@@ -1,4 +1,5 @@
 const sql = require('mssql');
+const cacheManager = require('./cache_manager.js');
 
 /**
  * SQL Server 客户端
@@ -18,13 +19,17 @@ class SqlServerClient {
       options: {
         encrypt: config.encrypt !== false, // 默认启用加密
         trustServerCertificate: config.trustServerCertificate === true,
+        connectTimeout: config.connectTimeout || 15000, // 连接超时时间
       },
       pool: {
-        max: 10,
-        min: 0,
-        idleTimeoutMillis: 30000,
+        max: 20, // 增加最大连接数
+        min: 2,  // 保持最小连接数
+        idleTimeoutMillis: 60000, // 延长空闲超时时间
+        acquireTimeoutMillis: 30000, // 获取连接的超时时间
+        createTimeoutMillis: 30000, // 创建连接的超时时间
+        destroyTimeoutMillis: 5000, // 销毁连接的超时时间
       },
-      requestTimeout: config.requestTimeout || 30000,
+      requestTimeout: config.requestTimeout || 60000, // 延长请求超时时间
     };
     this.pool = null;
   }
@@ -54,16 +59,41 @@ class SqlServerClient {
    */
   async executeQuery(query, params = {}) {
     try {
-      const pool = await this.getPool();
-      const request = pool.request();
+      // 尝试从缓存获取（简单查询）
+      if (Object.keys(params).length === 0) {
+        const cacheKey = {
+          dataSourceType: 'sqlserver',
+          server: this.config.server,
+          database: this.config.database,
+          sql: query
+        };
+        const cachedData = cacheManager.get(cacheKey);
+        if (cachedData) {
+          return cachedData;
+        }
 
-      // 添加参数
-      Object.keys(params).forEach(key => {
-        request.input(key, params[key]);
-      });
+        const pool = await this.getPool();
+        const request = pool.request();
 
-      const result = await request.query(query);
-      return result.recordset || [];
+        const result = await request.query(query);
+        const data = result.recordset || [];
+        
+        // 缓存结果
+        cacheManager.set(cacheKey, data);
+        return data;
+      } else {
+        // 带参数的查询不缓存
+        const pool = await this.getPool();
+        const request = pool.request();
+
+        // 添加参数
+        Object.keys(params).forEach(key => {
+          request.input(key, params[key]);
+        });
+
+        const result = await request.query(query);
+        return result.recordset || [];
+      }
     } catch (error) {
       console.error('SQL Server 查询执行失败:', error);
       throw error;
@@ -75,6 +105,19 @@ class SqlServerClient {
    */
   async getTableMeta(tableName, schema = 'dbo') {
     try {
+      // 尝试从缓存获取
+      const cacheKey = {
+        dataSourceType: 'sqlserver',
+        server: this.config.server,
+        database: this.config.database,
+        tableName: tableName,
+        schema: schema
+      };
+      const cachedMeta = cacheManager.getCachedTableMeta(cacheKey);
+      if (cachedMeta) {
+        return cachedMeta;
+      }
+
       const query = `
         SELECT 
           c.COLUMN_NAME AS name,
@@ -107,7 +150,7 @@ class SqlServerClient {
 
       const columns = await this.executeQuery(query, { tableName, schema });
       
-      return {
+      const result = {
         tableName: tableName,
         schema: schema,
         columns: columns.map(col => ({
@@ -122,6 +165,10 @@ class SqlServerClient {
           IsPrimaryKey: col.isPrimaryKey === 1,
         })),
       };
+
+      // 缓存结果
+      cacheManager.cacheTableMeta(cacheKey, result);
+      return result;
     } catch (error) {
       console.error('获取 SQL Server 表元数据失败:', error);
       throw error;
@@ -154,14 +201,46 @@ class SqlServerClient {
    */
   async getTableData(tableName, schema = 'dbo', limit = 1000, offset = 0) {
     try {
+      // 尝试从缓存获取
+      const cacheKey = {
+        dataSourceType: 'sqlserver',
+        server: this.config.server,
+        database: this.config.database,
+        tableName: tableName,
+        schema: schema,
+        limit: limit,
+        offset: offset
+      };
+      const cachedData = cacheManager.get(cacheKey);
+      if (cachedData) {
+        return cachedData;
+      }
+
+      // 优化查询语句，使用实际列排序而不是 (SELECT NULL)
+      // 尝试获取表的主键列作为排序依据
+      let orderByClause = 'ORDER BY (SELECT 1)';
+      try {
+        const meta = await this.getTableMeta(tableName, schema);
+        const primaryKeyColumn = meta.columns.find(col => col.IsPrimaryKey);
+        if (primaryKeyColumn) {
+          orderByClause = `ORDER BY [${primaryKeyColumn.Name}]`;
+        }
+      } catch (e) {
+        // 获取主键失败，使用默认排序
+        console.log('获取主键失败，使用默认排序:', e.message);
+      }
+
       const query = `
         SELECT * FROM [${schema}].[${tableName}]
-        ORDER BY (SELECT NULL)
+        ${orderByClause}
         OFFSET ${offset} ROWS
         FETCH NEXT ${limit} ROWS ONLY
       `;
       
-      return await this.executeQuery(query);
+      const data = await this.executeQuery(query);
+      // 缓存结果
+      cacheManager.set(cacheKey, data);
+      return data;
     } catch (error) {
       console.error('获取 SQL Server 表数据失败:', error);
       throw error;
@@ -173,6 +252,17 @@ class SqlServerClient {
    */
   async getTables() {
     try {
+      // 尝试从缓存获取
+      const cacheKey = {
+        dataSourceType: 'sqlserver',
+        server: this.config.server,
+        database: this.config.database
+      };
+      const cachedTables = cacheManager.getCachedTables(cacheKey);
+      if (cachedTables) {
+        return cachedTables;
+      }
+
       console.log('正在获取 SQL Server 表列表...');
       
       const query = `
@@ -192,6 +282,8 @@ class SqlServerClient {
         schema: table.tableSchema || 'dbo'
       }));
       
+      // 缓存结果
+      cacheManager.cacheTables(cacheKey, result);
       console.log('返回的表列表:', result);
       return result;
     } catch (error) {
