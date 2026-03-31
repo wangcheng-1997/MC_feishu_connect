@@ -7,7 +7,7 @@
   "icon": "https://img.alicdn.com/tfs/TB1Ly5oS3HqK1RjSZFPXXcwapXa-238-200.png",
   "extraData": {
     "disabledPeriodicSync": false,
-    "dataSourceConfigUiUri": "/",
+    "dataSourceConfigUiUri": "https://feishu-connect.immistudio.com",
     "initHeight": 600,
     "initWidth": 600
   },
@@ -27,5 +27,5 @@
     }
   },
   "author": "Kian Wang",
-  "homepage": "https://github.com/your-repo/maxcompute-lark-connector"
+  "homepage": "https://github.com/wangcheng-1997/MC_feishu_connect.git"
 }
