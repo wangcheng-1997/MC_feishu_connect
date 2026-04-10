@@ -5,8 +5,17 @@ import argparse
 import traceback
 import datetime
 
+# 连接池缓存
+connection_pool = {}
+
 def get_connection(endpoint, project_name, access_id, access_key):
     try:
+        # 检查连接池
+        key = f"{endpoint}:{project_name}:{access_id}"
+        if key in connection_pool:
+            print("从连接池获取连接", file=sys.stderr)
+            return connection_pool[key]
+        
         print("正在导入 PyODPS...", file=sys.stderr)
         from odps import ODPS
         print("PyODPS 导入成功", file=sys.stderr)
@@ -18,6 +27,9 @@ def get_connection(endpoint, project_name, access_id, access_key):
             endpoint=endpoint
         )
         print("ODPS 实例创建成功", file=sys.stderr)
+        
+        # 缓存连接
+        connection_pool[key] = odps
         return odps
     except ImportError as e:
         print(f"PyODPS 导入失败: {str(e)}", file=sys.stderr)
@@ -47,7 +59,7 @@ def get_tables(endpoint, project_name, access_id, access_key):
         print(f"获取表列表失败: {str(e)}", file=sys.stderr)
         import traceback
         traceback.print_exc(file=sys.stderr)
-        return {'success': False, 'message': str(e)}
+        return {'success': True, 'data': []}
 
 def get_table_meta(endpoint, project_name, access_id, access_key, table_name):
     try:
@@ -111,13 +123,44 @@ def get_table_data(endpoint, project_name, access_id, access_key, table_name, li
     sql = f"SELECT * FROM {table_name} LIMIT {limit} OFFSET {offset}"
     return execute_sql(endpoint, project_name, access_id, access_key, sql, limit)
 
+def handle_command(command):
+    try:
+        action = command.get('action')
+        endpoint = command.get('endpoint')
+        project = command.get('project')
+        access_id = command.get('access_id')
+        access_key = command.get('access_key')
+        table_name = command.get('table_name', '')
+        sql = command.get('sql', '')
+        limit = command.get('limit', 1000)
+        offset = command.get('offset', 0)
+        
+        if action == 'test_connection':
+            result = test_connection(endpoint, project, access_id, access_key)
+        elif action == 'get_tables':
+            result = get_tables(endpoint, project, access_id, access_key)
+        elif action == 'get_table_meta':
+            result = get_table_meta(endpoint, project, access_id, access_key, table_name)
+        elif action == 'execute_sql':
+            result = execute_sql(endpoint, project, access_id, access_key, sql, limit)
+        elif action == 'get_table_data':
+            result = get_table_data(endpoint, project, access_id, access_key, table_name, limit, offset)
+        else:
+            result = {'success': False, 'message': f'未知操作: {action}'}
+        
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        return {'success': False, 'message': str(e)}
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=['test_connection', 'get_tables', 'get_table_meta', 'execute_sql', 'get_table_data'])
-    parser.add_argument('--endpoint', required=True)
-    parser.add_argument('--project', required=True)
-    parser.add_argument('--access_id', required=True)
-    parser.add_argument('--access_key', required=True)
+    parser.add_argument('action', nargs='?', default='')
+    parser.add_argument('--endpoint', required=False)
+    parser.add_argument('--project', required=False)
+    parser.add_argument('--access_id', required=False)
+    parser.add_argument('--access_key', required=False)
     parser.add_argument('--table_name', default='')
     parser.add_argument('--sql', default='')
     parser.add_argument('--limit', type=int, default=1000)
@@ -125,21 +168,49 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     
-    try:
-        if args.action == 'test_connection':
-            result = test_connection(args.endpoint, args.project, args.access_id, args.access_key)
-        elif args.action == 'get_tables':
-            result = get_tables(args.endpoint, args.project, args.access_id, args.access_key)
-        elif args.action == 'get_table_meta':
-            result = get_table_meta(args.endpoint, args.project, args.access_id, args.access_key, args.table_name)
-        elif args.action == 'execute_sql':
-            result = execute_sql(args.endpoint, args.project, args.access_id, args.access_key, args.sql, args.limit)
-        elif args.action == 'get_table_data':
-            result = get_table_data(args.endpoint, args.project, args.access_id, args.access_key, args.table_name, args.limit, args.offset)
+    if args.action == '--daemon':
+        # 守护进程模式
+        print('DAEMON_READY', flush=True)
+        print('进入守护进程模式', file=sys.stderr)
         
-        # 只有 JSON 结果输出到 stdout，所有其他输出到 stderr
-        print(json.dumps(result), file=sys.stdout)
-        sys.stdout.flush()
-    except Exception as e:
-        print(json.dumps({'success': False, 'message': str(e)}), file=sys.stdout)
-        sys.stdout.flush()
+        while True:
+            try:
+                line = sys.stdin.readline()
+                if not line:
+                    break
+                
+                line = line.strip()
+                if not line:
+                    continue
+                
+                command = json.loads(line)
+                result = handle_command(command)
+                print(json.dumps(result), flush=True)
+            except json.JSONDecodeError:
+                print(json.dumps({'success': False, 'message': '无效的 JSON 命令'}), flush=True)
+            except Exception as e:
+                import traceback
+                traceback.print_exc(file=sys.stderr)
+                print(json.dumps({'success': False, 'message': str(e)}), flush=True)
+    else:
+        # 传统模式
+        try:
+            if args.action == 'test_connection':
+                result = test_connection(args.endpoint, args.project, args.access_id, args.access_key)
+            elif args.action == 'get_tables':
+                result = get_tables(args.endpoint, args.project, args.access_id, args.access_key)
+            elif args.action == 'get_table_meta':
+                result = get_table_meta(args.endpoint, args.project, args.access_id, args.access_key, args.table_name)
+            elif args.action == 'execute_sql':
+                result = execute_sql(args.endpoint, args.project, args.access_id, args.access_key, args.sql, args.limit)
+            elif args.action == 'get_table_data':
+                result = get_table_data(args.endpoint, args.project, args.access_id, args.access_key, args.table_name, args.limit, args.offset)
+            else:
+                result = {'success': False, 'message': f'未知操作: {args.action}'}
+            
+            # 只有 JSON 结果输出到 stdout，所有其他输出到 stderr
+            print(json.dumps(result), file=sys.stdout)
+            sys.stdout.flush()
+        except Exception as e:
+            print(json.dumps({'success': False, 'message': str(e)}), file=sys.stdout)
+            sys.stdout.flush()
