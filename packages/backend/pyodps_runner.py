@@ -157,7 +157,7 @@ def handle_command(command):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--daemon', action='store_true', help='Run in daemon mode')
-    parser.add_argument('action', nargs='?', default='', choices=['test_connection', 'get_tables', 'get_table_meta', 'execute_sql', 'get_table_data'])
+    parser.add_argument('action', nargs='?', default='')
     parser.add_argument('--endpoint', required=False)
     parser.add_argument('--project', required=False)
     parser.add_argument('--access_id', required=False)
