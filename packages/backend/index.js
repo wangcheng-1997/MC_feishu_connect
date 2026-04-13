@@ -3,7 +3,6 @@ const path = require("path");
 const fs = require("fs");
 
 const DataSourceFactory = require("./data_source_factory.js");
-const cacheManager = require("./cache_manager.js");
 const { judgeEncryptSignValid, setSecretKey } = require("./request_sign.js");
 const { getTableMeta } = require("./table_meta.js");
 const { getTableRecords } = require("./table_records.js");
@@ -368,32 +367,15 @@ app.post("/api/tables", async (req, res) => {
     console.log("tables 的请求数据", req.body);
 
     try {
-        // 尝试从缓存获取
-        const cachedTables = cacheManager.getCachedTables(req.body);
-        if (cachedTables) {
-            console.log("从缓存获取表列表");
-            return res.status(200).json({
-                code: 0,
-                message: "获取表列表成功（缓存）",
-                data: cachedTables,
-            });
-        }
-
-        // 正确处理请求数据格式
         const dataSourceConfig = {};
         dataSourceConfig[req.body.dataSourceType] = req.body;
         
-        // 创建数据源实例
         const dataSource = await DataSourceFactory.createDataSource(dataSourceConfig);
         const tables = await dataSource.getTables();
         
-        // 安全调用 close 方法
         if (dataSource.close && typeof dataSource.close === 'function') {
             await dataSource.close();
         }
-
-        // 缓存结果
-        cacheManager.cacheTables(req.body, tables);
 
         res.status(200).json({
             code: 0,
@@ -402,7 +384,6 @@ app.post("/api/tables", async (req, res) => {
         });
     } catch (error) {
         console.error("获取表列表失败:", error);
-        // 出错时返回空数组而不是错误，确保前端可以正常显示
         res.status(200).json({
             code: 0,
             message: "获取表列表成功",
@@ -419,23 +400,9 @@ app.post("/api/sqlserver_tables", async (req, res) => {
     console.log("sqlserver_tables 的请求数据", req.body);
 
     try {
-        // 尝试从缓存获取
-        const cachedTables = cacheManager.getCachedTables(req.body);
-        if (cachedTables) {
-            console.log("从缓存获取表列表");
-            return res.status(200).json({
-                code: 0,
-                message: "获取表列表成功（缓存）",
-                data: cachedTables,
-            });
-        }
-
         const dataSource = await DataSourceFactory.createDataSource({ sqlserver: req.body });
         const tables = await dataSource.getTables();
         await dataSource.close();
-
-        // 缓存结果
-        cacheManager.cacheTables(req.body, tables);
 
         res.status(200).json({
             code: 0,
@@ -460,23 +427,9 @@ app.post("/api/maxcompute_tables", async (req, res) => {
     console.log("maxcompute_tables 的请求数据", req.body);
 
     try {
-        // 尝试从缓存获取
-        const cachedTables = cacheManager.getCachedTables(req.body);
-        if (cachedTables) {
-            console.log("从缓存获取表列表");
-            return res.status(200).json({
-                code: 0,
-                message: "获取表列表成功（缓存）",
-                data: cachedTables,
-            });
-        }
-
         const dataSource = await DataSourceFactory.createDataSource({ maxcompute: req.body });
         const tables = await dataSource.getTables();
         await dataSource.close();
-
-        // 缓存结果
-        cacheManager.cacheTables(req.body, tables);
 
         res.status(200).json({
             code: 0,
@@ -488,25 +441,6 @@ app.post("/api/maxcompute_tables", async (req, res) => {
         res.status(500).json({
             code: 500,
             message: "获取表列表失败: " + error.message,
-            data: null,
-        });
-    }
-});
-
-// 清除缓存 API
-app.post("/api/clear_cache", async (req, res) => {
-    try {
-        cacheManager.clear();
-        res.json({
-            code: 200,
-            message: "缓存已清除",
-            data: null,
-        });
-    } catch (error) {
-        console.error("清除缓存失败:", error);
-        res.status(500).json({
-            code: 500,
-            message: "清除缓存失败: " + error.message,
             data: null,
         });
     }

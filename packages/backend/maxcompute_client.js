@@ -522,17 +522,6 @@ class MaxComputeClient {
 
   async getTables() {
     try {
-      // 尝试从缓存获取
-      const cacheKey = {
-        dataSourceType: 'maxcompute',
-        endpoint: this.endpoint,
-        projectName: this.projectName
-      };
-      const cachedTables = cacheManager.getCachedTables(cacheKey);
-      if (cachedTables) {
-        return cachedTables;
-      }
-
       const result = await runPyOdps('get_tables', {
         endpoint: this.endpoint,
         projectName: this.projectName,
@@ -542,11 +531,9 @@ class MaxComputeClient {
 
       if (result.success) {
         const tables = result.data || [];
-        // 缓存结果
-        cacheManager.cacheTables(cacheKey, tables);
+        console.log(`[getTables] 返回${tables.length}个表`);
         return tables;
       } else {
-        // 解析错误信息
         let errorMessage = result.message || '获取表列表失败';
         console.error('获取表列表失败:', errorMessage);
         return [];
@@ -560,18 +547,8 @@ class MaxComputeClient {
 
   async getTableMeta(tableName) {
     try {
-      // 尝试从缓存获取
-      const cacheKey = {
-        dataSourceType: 'maxcompute',
-        endpoint: this.endpoint,
-        projectName: this.projectName,
-        tableName: tableName
-      };
-      const cachedMeta = cacheManager.getCachedTableMeta(cacheKey);
-      if (cachedMeta) {
-        return cachedMeta;
-      }
-
+      console.log(`[getTableMeta] tableName=${tableName}`);
+      
       const result = await runPyOdps('get_table_meta', {
         endpoint: this.endpoint,
         projectName: this.projectName,
@@ -581,11 +558,9 @@ class MaxComputeClient {
       });
 
       if (result.success) {
-        // 缓存结果
-        cacheManager.cacheTableMeta(cacheKey, result.data);
+        console.log(`[getTableMeta] 获取成功`);
         return result.data;
       } else {
-        // 解析错误信息
         let errorMessage = result.message || '获取表元数据失败';
         if (errorMessage.includes('Table not found')) {
           errorMessage = `表 ${tableName} 不存在，请检查表名是否正确`;
