@@ -17,14 +17,12 @@ class CacheManager {
     if (!config) return null;
     
     // 提取关键参数
-    const { dataSourceType, sql, tableName, limit, offset, endpoint, projectName, server, database, schema } = config;
+    const { dataSourceType, sql, tableName, endpoint, projectName, server, database, schema } = config;
     
-    // 生成唯一键
+    // 生成唯一键（不包含 limit 和 offset）
     const keyParts = [
       dataSourceType,
       sql || tableName,
-      limit || 1000,
-      offset || 0,
       endpoint || server,
       projectName || database,
       schema || 'default'

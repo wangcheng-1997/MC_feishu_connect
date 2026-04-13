@@ -466,6 +466,25 @@ app.post("/api/maxcompute_tables", async (req, res) => {
     }
 });
 
+// 清除缓存 API
+app.post("/api/clear_cache", async (req, res) => {
+    try {
+        cacheManager.clear();
+        res.json({
+            code: 200,
+            message: "缓存已清除",
+            data: null,
+        });
+    } catch (error) {
+        console.error("清除缓存失败:", error);
+        res.status(500).json({
+            code: 500,
+            message: "清除缓存失败: " + error.message,
+            data: null,
+        });
+    }
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Data Sync Server running on port ${PORT}`);
