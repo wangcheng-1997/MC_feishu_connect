@@ -8,14 +8,12 @@ import sys
 import json
 import argparse
 import traceback
+import datetime
 
-# 连接池缓存
 connection_pool = {}
 
 def get_connection(endpoint, project_name, access_id, access_key):
     try:
-        import sys
-        # 检查连接池
         key = f"{endpoint}:{project_name}:{access_id}"
         if key in connection_pool:
             print("从连接池获取连接", file=sys.stderr)
@@ -33,16 +31,13 @@ def get_connection(endpoint, project_name, access_id, access_key):
         )
         print("ODPS 实例创建成功", file=sys.stderr)
         
-        # 缓存连接
         connection_pool[key] = odps
         return odps
     except ImportError as e:
-        import sys
         print(f"PyODPS 导入失败: {str(e)}", file=sys.stderr)
         print("请安装 PyODPS: pip install pyodps", file=sys.stderr)
         raise
     except Exception as e:
-        import sys
         print(f"创建连接失败: {str(e)}", file=sys.stderr)
         raise
 
@@ -56,7 +51,6 @@ def test_connection(endpoint, project_name, access_id, access_key):
 
 def get_tables(endpoint, project_name, access_id, access_key):
     try:
-        import sys
         print(f"尝试连接到: {endpoint}, 项目: {project_name}", file=sys.stderr)
         odps = get_connection(endpoint, project_name, access_id, access_key)
         print("连接成功，正在获取表列表...", file=sys.stderr)
@@ -64,7 +58,6 @@ def get_tables(endpoint, project_name, access_id, access_key):
         print(f"找到 {len(tables)} 个表", file=sys.stderr)
         return {'success': True, 'data': [{'name': t.name, 'schema': 'default'} for t in tables]}
     except Exception as e:
-        import sys
         print(f"获取表列表失败: {str(e)}", file=sys.stderr)
         import traceback
         traceback.print_exc(file=sys.stderr)
@@ -76,7 +69,7 @@ def get_table_meta(endpoint, project_name, access_id, access_key, table_name):
         table = odps.get_table(table_name)
         
         columns = []
-        for col in table.schema.columns:
+        for col in table.table_schema.columns:
             columns.append({
                 'Name': col.name,
                 'Type': str(col.type),
@@ -95,7 +88,7 @@ def get_table_meta(endpoint, project_name, access_id, access_key, table_name):
     except Exception as e:
         return {'success': False, 'message': str(e)}
 
-def execute_sql(endpoint, project_name, access_id, access_key, sql, limit=1000):
+def execute_sql(endpoint, project_name, access_id, access_key, sql, limit=None):
     try:
         odps = get_connection(endpoint, project_name, access_id, access_key)
         
@@ -107,11 +100,17 @@ def execute_sql(endpoint, project_name, access_id, access_key, sql, limit=1000):
             row_count = 0
             schema = reader.schema
             for record in reader:
-                if row_count >= limit:
+                if limit is not None and row_count >= limit:
                     break
                 record_dict = {}
                 for i, col in enumerate(schema.columns):
-                    record_dict[col.name] = str(record[i]) if record[i] is not None else None
+                    val = record[i]
+                    if val is None:
+                        record_dict[col.name] = None
+                    elif isinstance(val, (datetime.datetime, datetime.date)):
+                        record_dict[col.name] = val.strftime("%Y-%m-%d %H:%M:%S")
+                    else:
+                        record_dict[col.name] = str(val)
                 records.append(record_dict)
                 row_count += 1
         
@@ -119,9 +118,16 @@ def execute_sql(endpoint, project_name, access_id, access_key, sql, limit=1000):
     except Exception as e:
         return {'success': False, 'message': str(e)}
 
-def get_table_data(endpoint, project_name, access_id, access_key, table_name):
-    sql = f"SELECT * FROM {table_name}"
-    return execute_sql(endpoint, project_name, access_id, access_key, sql)
+def get_table_data(endpoint, project_name, access_id, access_key, table_name, limit=None, offset=0):
+    try:
+        sql = f"SELECT * FROM {table_name}"
+        if limit is not None:
+            sql = f"SELECT * FROM {table_name} LIMIT {limit} OFFSET {offset}"
+        return execute_sql(endpoint, project_name, access_id, access_key, sql, limit)
+    except Exception as e:
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        return {'success': False, 'message': str(e)}
 
 def handle_command(command):
     try:
@@ -132,6 +138,8 @@ def handle_command(command):
         access_key = command.get('access_key')
         table_name = command.get('table_name', '')
         sql = command.get('sql', '')
+        limit = command.get('limit')
+        offset = command.get('offset', 0)
         
         if action == 'test_connection':
             result = test_connection(endpoint, project, access_id, access_key)
@@ -140,9 +148,9 @@ def handle_command(command):
         elif action == 'get_table_meta':
             result = get_table_meta(endpoint, project, access_id, access_key, table_name)
         elif action == 'execute_sql':
-            result = execute_sql(endpoint, project, access_id, access_key, sql)
+            result = execute_sql(endpoint, project, access_id, access_key, sql, limit)
         elif action == 'get_table_data':
-            result = get_table_data(endpoint, project, access_id, access_key, table_name)
+            result = get_table_data(endpoint, project, access_id, access_key, table_name, limit, offset)
         else:
             result = {'success': False, 'message': f'未知操作: {action}'}
         
@@ -154,6 +162,7 @@ def handle_command(command):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--daemon', action='store_true', help='Run in daemon mode')
     parser.add_argument('action', nargs='?', default='')
     parser.add_argument('--endpoint', required=False)
     parser.add_argument('--project', required=False)
@@ -166,8 +175,7 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     
-    if args.action == '--daemon':
-        # 守护进程模式
+    if args.daemon:
         print('DAEMON_READY', flush=True)
         print('进入守护进程模式', file=sys.stderr)
         
@@ -191,8 +199,6 @@ if __name__ == '__main__':
                 traceback.print_exc(file=sys.stderr)
                 print(json.dumps({'success': False, 'message': str(e)}), flush=True)
     else:
-        # 传统模式
-        import sys
         try:
             if args.action == 'test_connection':
                 result = test_connection(args.endpoint, args.project, args.access_id, args.access_key)
@@ -201,13 +207,12 @@ if __name__ == '__main__':
             elif args.action == 'get_table_meta':
                 result = get_table_meta(args.endpoint, args.project, args.access_id, args.access_key, args.table_name)
             elif args.action == 'execute_sql':
-                result = execute_sql(args.endpoint, args.project, args.access_id, args.access_key, args.sql, args.limit)
+                result = execute_sql(args.endpoint, args.project, args.access_id, args.access_key, args.sql)
             elif args.action == 'get_table_data':
-                result = get_table_data(args.endpoint, args.project, args.access_id, args.access_key, args.table_name, args.limit, args.offset)
+                result = get_table_data(args.endpoint, args.project, args.access_id, args.access_key, args.table_name)
             else:
                 result = {'success': False, 'message': f'未知操作: {args.action}'}
             
-            # 只有 JSON 结果输出到 stdout，所有其他输出到 stderr
             print(json.dumps(result), file=sys.stdout)
             sys.stdout.flush()
         except Exception as e:
@@ -428,6 +433,7 @@ function runPyOdps(action, config) {
       access_key: config.accessKey,
       table_name: config.tableName || '',
       sql: config.sql || '',
+      limit: config.limit,
       offset: config.offset || 0
     };
 
@@ -595,19 +601,15 @@ class MaxComputeClient {
     }
   }
 
-  /**
-   * 获取表数据
-   * @param {string} tableName - 表名
-   * @returns {Promise<Array>} 表数据数组
-   */
-  async getTableData(tableName) {
+  async getTableData(tableName, limit = null, offset = 0) {
     try {
-      // 尝试从缓存获取
       const cacheKey = {
         dataSourceType: 'maxcompute',
         endpoint: this.endpoint,
         projectName: this.projectName,
-        tableName: tableName
+        tableName: tableName,
+        limit: limit,
+        offset: offset
       };
       const cachedData = cacheManager.get(cacheKey);
       if (cachedData) {
@@ -619,16 +621,16 @@ class MaxComputeClient {
         projectName: this.projectName,
         accessId: this.accessId,
         accessKey: this.accessKey,
-        tableName: tableName
+        tableName: tableName,
+        limit: limit,
+        offset: offset
       });
 
       if (result.success) {
         const data = result.data || [];
-        // 缓存结果
         cacheManager.set(cacheKey, data);
         return data;
       } else {
-        // 解析错误信息
         let errorMessage = result.message || '获取表数据失败';
         if (errorMessage.includes('Table not found')) {
           errorMessage = `表 ${tableName} 不存在，请检查表名是否正确`;

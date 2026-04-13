@@ -86,7 +86,7 @@ def get_table_meta(endpoint, project_name, access_id, access_key, table_name):
     except Exception as e:
         return {'success': False, 'message': str(e)}
 
-def execute_sql(endpoint, project_name, access_id, access_key, sql):
+def execute_sql(endpoint, project_name, access_id, access_key, sql, limit=None):
     try:
         odps = get_connection(endpoint, project_name, access_id, access_key)
         
@@ -98,6 +98,8 @@ def execute_sql(endpoint, project_name, access_id, access_key, sql):
             row_count = 0
             schema = reader.schema
             for record in reader:
+                if limit is not None and row_count >= limit:
+                    break
                 record_dict = {}
                 for i, col in enumerate(schema.columns):
                     val = record[i]
@@ -114,32 +116,12 @@ def execute_sql(endpoint, project_name, access_id, access_key, sql):
     except Exception as e:
         return {'success': False, 'message': str(e)}
 
-def get_table_data(endpoint, project_name, access_id, access_key, table_name):
+def get_table_data(endpoint, project_name, access_id, access_key, table_name, limit=None, offset=0):
     try:
-        odps = get_connection(endpoint, project_name, access_id, access_key)
-        
-        # 获取表数据
-        table = odps.get_table(table_name)
-        with table.open_reader() as reader:
-            records = []
-            row_count = 0
-            schema = reader.schema
-            
-            # 读取所有数据
-            for record in reader:
-                record_dict = {}
-                for j, col in enumerate(schema.columns):
-                    val = record[j]
-                    if val is None:
-                        record_dict[col.name] = None
-                    elif isinstance(val, (datetime.datetime, datetime.date)):
-                        record_dict[col.name] = val.strftime("%Y-%m-%d %H:%M:%S")
-                    else:
-                        record_dict[col.name] = str(val)
-                records.append(record_dict)
-                row_count += 1
-            
-            return {'success': True, 'data': records, 'total': row_count}
+        sql = f"SELECT * FROM {table_name}"
+        if limit is not None:
+            sql = f"SELECT * FROM {table_name} LIMIT {limit} OFFSET {offset}"
+        return execute_sql(endpoint, project_name, access_id, access_key, sql, limit)
     except Exception as e:
         import traceback
         traceback.print_exc(file=sys.stderr)
@@ -154,6 +136,8 @@ def handle_command(command):
         access_key = command.get('access_key')
         table_name = command.get('table_name', '')
         sql = command.get('sql', '')
+        limit = command.get('limit')
+        offset = command.get('offset', 0)
         
         if action == 'test_connection':
             result = test_connection(endpoint, project, access_id, access_key)
@@ -162,9 +146,9 @@ def handle_command(command):
         elif action == 'get_table_meta':
             result = get_table_meta(endpoint, project, access_id, access_key, table_name)
         elif action == 'execute_sql':
-            result = execute_sql(endpoint, project, access_id, access_key, sql)
+            result = execute_sql(endpoint, project, access_id, access_key, sql, limit)
         elif action == 'get_table_data':
-            result = get_table_data(endpoint, project, access_id, access_key, table_name)
+            result = get_table_data(endpoint, project, access_id, access_key, table_name, limit, offset)
         else:
             result = {'success': False, 'message': f'未知操作: {action}'}
         
@@ -214,7 +198,6 @@ if __name__ == '__main__':
                 traceback.print_exc(file=sys.stderr)
                 print(json.dumps({'success': False, 'message': str(e)}), flush=True)
     else:
-        # 传统模式
         try:
             if args.action == 'test_connection':
                 result = test_connection(args.endpoint, args.project, args.access_id, args.access_key)
@@ -223,13 +206,12 @@ if __name__ == '__main__':
             elif args.action == 'get_table_meta':
                 result = get_table_meta(args.endpoint, args.project, args.access_id, args.access_key, args.table_name)
             elif args.action == 'execute_sql':
-                result = execute_sql(args.endpoint, args.project, args.access_id, args.access_key, args.sql)
+                result = execute_sql(args.endpoint, args.project, args.access_id, args.access_key, args.sql, args.limit)
             elif args.action == 'get_table_data':
-                result = get_table_data(args.endpoint, args.project, args.access_id, args.access_key, args.table_name)
+                result = get_table_data(args.endpoint, args.project, args.access_id, args.access_key, args.table_name, args.limit, args.offset)
             else:
                 result = {'success': False, 'message': f'未知操作: {args.action}'}
             
-            # 只有 JSON 结果输出到 stdout，所有其他输出到 stderr
             print(json.dumps(result), file=sys.stdout)
             sys.stdout.flush()
         except Exception as e:

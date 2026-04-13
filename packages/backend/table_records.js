@@ -23,39 +23,27 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
   try {
     const client = new MaxComputeClient(config);
     
-    // 确保 limit 不超过 1000（飞书表格限制）
     const batchSize = Math.min(limit, 1000);
     
     let data;
     
-    // 如果提供了自定义 SQL，则执行自定义查询
     if (config.sql) {
-      // 在SQL层面实现分页，避免内存溢出
       data = await client.executeSQL(config.sql, batchSize, offset);
       
-      // 判断是否还有更多数据：如果返回的数据量等于批次大小，说明可能还有更多
       const hasMore = data.length === batchSize;
       const nextPageToken = hasMore ? String(offset + batchSize) : '';
       
       return generateTableRecords(data, fields, hasMore, nextPageToken);
     } else {
-      // 否则查询整个表
-      const allData = await client.getTableData(config.tableName);
+      data = await client.getTableData(config.tableName, batchSize, offset);
       
-      // 应用分页逻辑
-      const startIndex = offset;
-      const endIndex = Math.min(offset + batchSize, allData.length);
-      data = allData.slice(startIndex, endIndex);
-      
-      // 判断是否还有更多数据：如果还有未读取的数据，说明还有更多
-      const hasMore = endIndex < allData.length;
-      const nextPageToken = hasMore ? String(endIndex) : '';
+      const hasMore = data.length === batchSize;
+      const nextPageToken = hasMore ? String(offset + batchSize) : '';
       
       return generateTableRecords(data, fields, hasMore, nextPageToken);
     }
   } catch (error) {
     console.error('获取 MaxCompute 表记录失败:', error);
-    // 返回默认数据作为 fallback
     return getDefaultTableRecords();
   }
 }
