@@ -107,14 +107,12 @@ app.get("/meta.json", (req, res) => {
  */
 function parseLarkParams(body) {
     try {
-        // 如果有 params 字段，说明是飞书插件调用
         if (body.params) {
             const params =
                 typeof body.params === "string"
                     ? JSON.parse(body.params)
                     : body.params;
 
-            // 解析 datasourceConfig
             if (params.datasourceConfig) {
                 const config =
                     typeof params.datasourceConfig === "string"
@@ -125,6 +123,17 @@ function parseLarkParams(body) {
                     "解析后的 datasourceConfig:",
                     JSON.stringify(config).substring(0, 200),
                 );
+                
+                if (params.pageToken) {
+                    config.pageToken = params.pageToken;
+                }
+                if (params.nextPageToken) {
+                    config.nextPageToken = params.nextPageToken;
+                }
+                if (params.maxPageSize) {
+                    config.limit = params.maxPageSize;
+                }
+                
                 return config;
             }
         }
@@ -228,6 +237,7 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         // 判断数据源类型
         if (config.sqlserver) {
             // SQL Server 数据源
+            console.log(`[分页参数] offset=${offset}, limit=${limit}`);
             data = await getSqlServerTableRecords(
                 config.sqlserver,
                 config.fields,
@@ -236,12 +246,14 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
             );
         } else {
             // MaxCompute 数据源（默认）
-            // 将分页参数传递给 getTableRecords
+            // 构建配置，确保分页参数正确传递
             const configWithPaging = {
-                ...config,
+                maxcompute: config.maxcompute,
+                fields: config.fields,
                 offset: offset,
                 limit: limit
             };
+            console.log(`[分页参数] offset=${offset}, limit=${limit}, sql=${config.maxcompute?.sql?.substring(0, 50)}`);
             data = await getTableRecords(configWithPaging);
         }
 
