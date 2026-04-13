@@ -104,7 +104,7 @@ function getDefaultTableMeta() {
         isPrimary: false,
         description: "创建时间",
         property: {
-          formatter: "yyyy-MM-dd HH:mm:ss",
+          formatter: "yyyy-MM-dd HH:mm",
         },
       },
       {
