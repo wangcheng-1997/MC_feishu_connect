@@ -213,12 +213,15 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         }
 
         // 获取分页参数（用于分批写入）
-        // 飞书多维表格会使用 nextPageToken 作为下一次请求的 offset 参数
+        // 飞书多维表格会使用 pageToken 作为下一次请求的 offset 参数
         let offset = parseInt(config.offset) || 0;
         const limit = Math.min(parseInt(config.limit) || 1000, 1000);
         
-        // 如果有 nextPageToken，则使用它作为 offset
-        if (config.nextPageToken) {
+        // 如果有 pageToken 或 nextPageToken，则使用它作为 offset
+        // 支持两种参数名以确保兼容性
+        if (config.pageToken) {
+            offset = parseInt(config.pageToken) || 0;
+        } else if (config.nextPageToken) {
             offset = parseInt(config.nextPageToken) || 0;
         }
 

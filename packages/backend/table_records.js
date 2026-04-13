@@ -34,7 +34,7 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
       data = await client.executeSQL(config.sql, batchSize, offset);
       
       // 判断是否还有更多数据：如果返回的数据量等于批次大小，说明可能还有更多
-      const hasMore = data.length >= batchSize;
+      const hasMore = data.length === batchSize;
       const nextPageToken = hasMore ? String(offset + batchSize) : '';
       
       return generateTableRecords(data, fields, hasMore, nextPageToken);
@@ -47,8 +47,8 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
       const endIndex = Math.min(offset + batchSize, allData.length);
       data = allData.slice(startIndex, endIndex);
       
-      // 判断是否还有更多数据：如果返回的数据量等于批次大小，说明可能还有更多
-      const hasMore = data.length >= batchSize;
+      // 判断是否还有更多数据：如果还有未读取的数据，说明还有更多
+      const hasMore = endIndex < allData.length;
       const nextPageToken = hasMore ? String(endIndex) : '';
       
       return generateTableRecords(data, fields, hasMore, nextPageToken);
@@ -127,6 +127,23 @@ async function getTableRecords(reqBody = {}) {
     const limit = Math.min(parseInt(reqBody.limit) || 1000, 1000);
     
     return await getTableRecordsFromMaxCompute(reqBody.maxcompute, fields, offset, limit);
+  }
+  
+  // 如果请求中包含 SQL Server 配置
+  if (reqBody && reqBody.sqlserver) {
+    // 如果没有提供字段定义，先获取表元数据
+    let fields = reqBody.fields;
+    if (!fields) {
+      const { getSqlServerTableMeta } = require('./sqlserver_handler.js');
+      const meta = await getSqlServerTableMeta(reqBody.sqlserver);
+      fields = meta.fields;
+    }
+    
+    // 获取分页参数
+    const offset = parseInt(reqBody.offset) || 0;
+    const limit = Math.min(parseInt(reqBody.limit) || 1000, 1000);
+    
+    return await getSqlServerTableRecords(reqBody.sqlserver, fields, offset, limit);
   }
   
   // 否则返回默认数据

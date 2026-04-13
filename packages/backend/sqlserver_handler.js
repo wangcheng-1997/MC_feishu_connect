@@ -163,7 +163,7 @@ async function getSqlServerTableRecords(config, fields, offset, limit) {
       data = await client.executeQuery(config.sql, {}, batchSize, batchOffset);
       
       // 判断是否还有更多数据：如果返回的数据量等于批次大小，说明可能还有更多
-      const hasMore = data.length >= batchSize;
+      const hasMore = data.length === batchSize;
       const nextPageToken = hasMore ? String(batchOffset + batchSize) : '';
       
       // 如果没有提供字段定义，先获取表元数据
@@ -177,8 +177,8 @@ async function getSqlServerTableRecords(config, fields, offset, limit) {
       // 否则查询整个表
       data = await client.getTableData(config.tableName, schema, batchSize, batchOffset);
       
-      // 判断是否还有更多数据
-      const hasMore = data.length >= batchSize;
+      // 判断是否还有更多数据：如果返回的数据量等于批次大小，说明可能还有更多
+      const hasMore = data.length === batchSize;
       const nextPageToken = hasMore ? String(batchOffset + batchSize) : '';
       
       // 如果没有提供字段定义，先获取表元数据
