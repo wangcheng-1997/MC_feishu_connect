@@ -67,7 +67,7 @@ def get_table_meta(endpoint, project_name, access_id, access_key, table_name):
         table = odps.get_table(table_name)
         
         columns = []
-        for col in table.schema.columns:
+        for col in table.table_schema.columns:
             columns.append({
                 'Name': col.name,
                 'Type': str(col.type),
@@ -86,7 +86,7 @@ def get_table_meta(endpoint, project_name, access_id, access_key, table_name):
     except Exception as e:
         return {'success': False, 'message': str(e)}
 
-def execute_sql(endpoint, project_name, access_id, access_key, sql, limit=None):
+def execute_sql(endpoint, project_name, access_id, access_key, sql):
     try:
         odps = get_connection(endpoint, project_name, access_id, access_key)
         
@@ -98,9 +98,6 @@ def execute_sql(endpoint, project_name, access_id, access_key, sql, limit=None):
             row_count = 0
             schema = reader.schema
             for record in reader:
-                # 如果设置了 limit，则在达到限制时停止
-                if limit is not None and row_count >= limit:
-                    break
                 record_dict = {}
                 for i, col in enumerate(schema.columns):
                     val = record[i]
@@ -162,7 +159,6 @@ def handle_command(command):
         access_key = command.get('access_key')
         table_name = command.get('table_name', '')
         sql = command.get('sql', '')
-        limit = command.get('limit')  # 不设置默认值，允许 None
         offset = command.get('offset', 0)
         
         if action == 'test_connection':
@@ -172,9 +168,9 @@ def handle_command(command):
         elif action == 'get_table_meta':
             result = get_table_meta(endpoint, project, access_id, access_key, table_name)
         elif action == 'execute_sql':
-            result = execute_sql(endpoint, project, access_id, access_key, sql, limit)
+            result = execute_sql(endpoint, project, access_id, access_key, sql)
         elif action == 'get_table_data':
-            result = get_table_data(endpoint, project, access_id, access_key, table_name, limit, offset)
+            result = get_table_data(endpoint, project, access_id, access_key, table_name, 1000, offset)
         else:
             result = {'success': False, 'message': f'未知操作: {action}'}
         

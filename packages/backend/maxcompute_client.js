@@ -430,7 +430,6 @@ function runPyOdps(action, config) {
       access_key: config.accessKey,
       table_name: config.tableName || '',
       sql: config.sql || '',
-      limit: config.limit !== undefined ? config.limit : null,
       offset: config.offset || 0
     };
 
@@ -649,15 +648,14 @@ class MaxComputeClient {
     }
   }
 
-  async executeSQL(sql, limit = null) {
+  async executeSQL(sql) {
     try {
       // 尝试从缓存获取
       const cacheKey = {
         dataSourceType: 'maxcompute',
         endpoint: this.endpoint,
         projectName: this.projectName,
-        sql: sql,
-        limit: limit
+        sql: sql
       };
       const cachedData = cacheManager.get(cacheKey);
       if (cachedData) {
@@ -669,8 +667,7 @@ class MaxComputeClient {
         projectName: this.projectName,
         accessId: this.accessId,
         accessKey: this.accessKey,
-        sql: sql,
-        limit: limit
+        sql: sql
       });
 
       if (result.success) {
