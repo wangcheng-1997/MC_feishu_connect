@@ -284,7 +284,6 @@ class SqlServerClient {
       
       // 缓存结果
       cacheManager.cacheTables(cacheKey, result);
-      console.log('返回的表列表:', result);
       return result;
     } catch (error) {
       console.error('获取 SQL Server 表列表失败:', error);

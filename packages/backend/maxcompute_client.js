@@ -433,8 +433,6 @@ function runPyOdps(action, config) {
       offset: config.offset || 0
     };
 
-    console.log('执行 PyODPS:', action, config.tableName || config.sql || '');
-    
     pythonProcessManager.runCommand(command).then(resolve);
   });
 }

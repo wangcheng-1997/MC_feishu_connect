@@ -26,15 +26,15 @@ if (process.env.REQUEST_SIGN_SECRET) {
  */
 function validateRequestSignature(req, res, next) {
     try {
-        console.log("========== 收到请求 ==========");
-        console.log("方法:", req.method);
-        console.log("路径:", req.path);
-        console.log("Headers:", JSON.stringify(req.headers, null, 2));
-        console.log("Body:", JSON.stringify(req.body, null, 2));
-        console.log("==============================");
+        // 生产环境不打印详细请求信息
+        // console.log("========== 收到请求 ==========");
+        // console.log("方法:", req.method);
+        // console.log("路径:", req.path);
+        // console.log("Headers:", JSON.stringify(req.headers, null, 2));
+        // console.log("Body:", JSON.stringify(req.body, null, 2));
+        // console.log("==============================");
         
         const isValid = judgeEncryptSignValid(req);
-        console.log("加密判断结果：", isValid);
         
         if (!isValid) {
             return res.status(401).json({ code: 401, message: '签名验证失败' });
@@ -43,7 +43,6 @@ function validateRequestSignature(req, res, next) {
         next();
     } catch (error) {
         console.error('签名验证错误:', error.message);
-        console.error('错误堆栈:', error.stack);
         return res.status(500).json({ code: 500, message: '签名验证服务异常' });
     }
 }
@@ -362,8 +361,6 @@ app.post("/api/tables", async (req, res) => {
         if (dataSource.close && typeof dataSource.close === 'function') {
             await dataSource.close();
         }
-
-        console.log("返回表列表:", tables);
 
         // 缓存结果
         cacheManager.cacheTables(req.body, tables);

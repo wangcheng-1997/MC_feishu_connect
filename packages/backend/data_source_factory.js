@@ -26,14 +26,14 @@ class DataSourceFactory {
   static async createMaxComputeDataSource(config) {
     const { MaxComputeClient, getEndpoint } = require('./maxcompute_client.js');
     
-    console.log("原始配置:", JSON.stringify(config, null, 2));
+    // 生产环境不打印配置信息
+    // console.log("原始配置:", JSON.stringify(config, null, 2));
     
     // 如果提供了 region 和 networkType，自动生成 endpoint
     let endpoint = config.endpoint;
     if (!endpoint && config.region) {
       const networkType = config.networkType || 'public';
       endpoint = getEndpoint(config.region, networkType);
-      console.log(`自动生成 Endpoint: ${endpoint} (region: ${config.region}, networkType: ${networkType})`);
     }
     
     // 直接使用扁平格式配置
@@ -46,16 +46,11 @@ class DataSourceFactory {
       region: config.region
     };
     
-    console.log("处理后的配置:", JSON.stringify(processedConfig, null, 2));
+    // 生产环境不打印配置信息
+    // console.log("处理后的配置:", JSON.stringify(processedConfig, null, 2));
     
     // 验证必要字段
     if (!processedConfig.accessId || !processedConfig.accessKey || !processedConfig.endpoint || !processedConfig.projectName) {
-      console.error("缺少必要字段:", {
-        accessId: !!processedConfig.accessId,
-        accessKey: !!processedConfig.accessKey,
-        endpoint: !!processedConfig.endpoint,
-        projectName: !!processedConfig.projectName
-      });
       throw new Error('缺少必要的 MaxCompute 配置参数');
     }
     
