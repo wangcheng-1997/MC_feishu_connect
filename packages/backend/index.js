@@ -224,7 +224,9 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         // 获取分页参数（用于分批写入）
         // 飞书多维表格会使用 pageToken 作为下一次请求的 offset 参数
         let offset = parseInt(config.offset) || 0;
-        const limit = Math.min(parseInt(config.limit) || 1000, 1000);
+        // limit 优先级：顶层 limit > maxcompute.limit/sqlserver.limit > 默认 1000
+        let limit = parseInt(config.limit) || parseInt(config.maxcompute?.limit) || parseInt(config.sqlserver?.limit) || 1000;
+        limit = Math.min(limit, 1000); // 最大 1000
         
         // 如果有 pageToken 或 nextPageToken，则使用它作为 offset
         // 支持两种参数名以确保兼容性
