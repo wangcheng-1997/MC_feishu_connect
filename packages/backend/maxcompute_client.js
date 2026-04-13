@@ -606,9 +606,7 @@ class MaxComputeClient {
         dataSourceType: 'maxcompute',
         endpoint: this.endpoint,
         projectName: this.projectName,
-        tableName: tableName,
-        limit: limit,
-        offset: offset
+        tableName: tableName
       };
       const cachedData = cacheManager.get(cacheKey);
       if (cachedData) {

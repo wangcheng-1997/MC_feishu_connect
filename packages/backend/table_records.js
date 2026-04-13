@@ -28,14 +28,12 @@ async function getTableRecordsFromMaxCompute(config, fields) {
       data = await client.executeSQL(config.sql);
     } else {
       // 否则查询整个表（使用默认的 limit 和 offset）
-      const limit = config.limit || 1000;
-      const offset = config.offset || 0;
-      data = await client.getTableData(config.tableName, limit, offset);
+      data = await client.getTableData(config.tableName);
     }
     
     // 转换数据格式
-    const hasMore = config.sql ? false : data.length >= (config.limit || 1000);
-    const nextPageToken = config.sql ? '' : (hasMore ? String((config.offset || 0) + (config.limit || 1000)) : '');
+    const hasMore = false;
+    const nextPageToken = '';
     
     return generateTableRecords(data, fields, hasMore, nextPageToken);
   } catch (error) {
