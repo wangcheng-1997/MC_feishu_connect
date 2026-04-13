@@ -86,7 +86,7 @@ def get_table_meta(endpoint, project_name, access_id, access_key, table_name):
     except Exception as e:
         return {'success': False, 'message': str(e)}
 
-def execute_sql(endpoint, project_name, access_id, access_key, sql, limit=1000):
+def execute_sql(endpoint, project_name, access_id, access_key, sql, limit=None):
     try:
         odps = get_connection(endpoint, project_name, access_id, access_key)
         
@@ -98,7 +98,8 @@ def execute_sql(endpoint, project_name, access_id, access_key, sql, limit=1000):
             row_count = 0
             schema = reader.schema
             for record in reader:
-                if row_count >= limit:
+                # 如果设置了 limit，则在达到限制时停止
+                if limit is not None and row_count >= limit:
                     break
                 record_dict = {}
                 for i, col in enumerate(schema.columns):
@@ -117,11 +118,40 @@ def execute_sql(endpoint, project_name, access_id, access_key, sql, limit=1000):
         return {'success': False, 'message': str(e)}
 
 def get_table_data(endpoint, project_name, access_id, access_key, table_name, limit=1000, offset=0):
-    import re
-    if not re.match(r'^[a-zA-Z0-9_.-]+$', table_name):
-        return {'success': False, 'message': f'表名包含非法字符: {table_name}'}
-    sql = f"SELECT * FROM {table_name} LIMIT {limit} OFFSET {offset}"
-    return execute_sql(endpoint, project_name, access_id, access_key, sql, limit)
+    try:
+        odps = get_connection(endpoint, project_name, access_id, access_key)
+        
+        # 获取表数据
+        table = odps.get_table(table_name)
+        with table.open_reader() as reader:
+            records = []
+            row_count = 0
+            schema = reader.schema
+            
+            # 跳过 offset 行
+            for i, record in enumerate(reader):
+                if i < offset:
+                    continue
+                if row_count >= limit:
+                    break
+                    
+                record_dict = {}
+                for j, col in enumerate(schema.columns):
+                    val = record[j]
+                    if val is None:
+                        record_dict[col.name] = None
+                    elif isinstance(val, (datetime.datetime, datetime.date)):
+                        record_dict[col.name] = val.strftime("%Y-%m-%d %H:%M:%S")
+                    else:
+                        record_dict[col.name] = str(val)
+                records.append(record_dict)
+                row_count += 1
+            
+            return {'success': True, 'data': records, 'total': row_count}
+    except Exception as e:
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        return {'success': False, 'message': str(e)}
 
 def handle_command(command):
     try:
@@ -132,7 +162,7 @@ def handle_command(command):
         access_key = command.get('access_key')
         table_name = command.get('table_name', '')
         sql = command.get('sql', '')
-        limit = command.get('limit', 1000)
+        limit = command.get('limit')  # 不设置默认值，允许 None
         offset = command.get('offset', 0)
         
         if action == 'test_connection':

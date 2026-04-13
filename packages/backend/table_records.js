@@ -25,19 +25,19 @@ async function getTableRecordsFromMaxCompute(config, fields) {
     
     let data;
     
-    // 如果提供了自定义 SQL，则执行自定义查询
+    // 如果提供了自定义 SQL，则执行自定义查询（不添加额外的 limit 和 offset）
     if (config.sql) {
       data = await client.executeSQL(config.sql);
     } else {
-      // 否则查询整个表
+      // 否则查询整个表（使用默认的 limit 和 offset）
       const limit = config.limit || 1000;
       const offset = config.offset || 0;
       data = await client.getTableData(config.tableName, limit, offset);
     }
     
     // 转换数据格式
-    const hasMore = data.length >= (config.limit || 1000);
-    const nextPageToken = hasMore ? String((config.offset || 0) + (config.limit || 1000)) : '';
+    const hasMore = config.sql ? false : data.length >= (config.limit || 1000);
+    const nextPageToken = config.sql ? '' : (hasMore ? String((config.offset || 0) + (config.limit || 1000)) : '');
     
     return generateTableRecords(data, fields, hasMore, nextPageToken);
   } catch (error) {

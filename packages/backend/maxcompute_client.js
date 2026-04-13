@@ -430,7 +430,7 @@ function runPyOdps(action, config) {
       access_key: config.accessKey,
       table_name: config.tableName || '',
       sql: config.sql || '',
-      limit: config.limit || 1000,
+      limit: config.limit !== undefined ? config.limit : null,
       offset: config.offset || 0
     };
 
@@ -649,7 +649,7 @@ class MaxComputeClient {
     }
   }
 
-  async executeSQL(sql, limit = 1000) {
+  async executeSQL(sql, limit = null) {
     try {
       // 尝试从缓存获取
       const cacheKey = {
