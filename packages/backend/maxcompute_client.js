@@ -207,9 +207,9 @@ if __name__ == '__main__':
             elif args.action == 'get_table_meta':
                 result = get_table_meta(args.endpoint, args.project, args.access_id, args.access_key, args.table_name)
             elif args.action == 'execute_sql':
-                result = execute_sql(args.endpoint, args.project, args.access_id, args.access_key, args.sql)
+                result = execute_sql(args.endpoint, args.project, args.access_id, args.access_key, args.sql, args.limit)
             elif args.action == 'get_table_data':
-                result = get_table_data(args.endpoint, args.project, args.access_id, args.access_key, args.table_name)
+                result = get_table_data(args.endpoint, args.project, args.access_id, args.access_key, args.table_name, args.limit, args.offset)
             else:
                 result = {'success': False, 'message': f'未知操作: {args.action}'}
             
@@ -675,7 +675,9 @@ class MaxComputeClient {
         projectName: this.projectName,
         accessId: this.accessId,
         accessKey: this.accessKey,
-        sql: finalSQL
+        sql: finalSQL,
+        limit: limit,
+        offset: offset
       });
 
       if (result.success) {

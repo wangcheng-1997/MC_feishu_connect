@@ -16,23 +16,20 @@ class CacheManager {
   generateKey(config) {
     if (!config) return null;
     
-    // 提取关键参数
     const { dataSourceType, sql, tableName, endpoint, projectName, server, database, schema, offset, limit } = config;
     
-    // 生成唯一键（包含 offset 和 limit，确保每个分页请求都有独立的缓存）
     const keyParts = [
-      dataSourceType,
-      sql || tableName,
-      endpoint || server,
-      projectName || database,
+      dataSourceType || '',
+      sql || tableName || '',
+      endpoint || server || '',
+      projectName || database || '',
       schema || 'default',
-      offset || 0,
-      limit || 1000
+      String(offset !== undefined ? offset : 0),
+      String(limit !== undefined ? limit : 1000)
     ];
     
-    // 使用SHA-256哈希算法避免键碰撞，更安全
     const crypto = require('crypto');
-    return crypto.createHash('sha256').update(keyParts.filter(Boolean).join('|')).digest('hex');
+    return crypto.createHash('sha256').update(keyParts.join('|')).digest('hex');
   }
 
   /**
