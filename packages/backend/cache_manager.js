@@ -17,15 +17,17 @@ class CacheManager {
     if (!config) return null;
     
     // 提取关键参数
-    const { dataSourceType, sql, tableName, endpoint, projectName, server, database, schema } = config;
+    const { dataSourceType, sql, tableName, endpoint, projectName, server, database, schema, offset, limit } = config;
     
-    // 生成唯一键（不包含 limit 和 offset）
+    // 生成唯一键（包含 offset 和 limit，确保每个分页请求都有独立的缓存）
     const keyParts = [
       dataSourceType,
       sql || tableName,
       endpoint || server,
       projectName || database,
-      schema || 'default'
+      schema || 'default',
+      offset || 0,
+      limit || 1000
     ];
     
     // 使用SHA-256哈希算法避免键碰撞，更安全

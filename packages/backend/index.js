@@ -213,8 +213,14 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         }
 
         // 获取分页参数（用于分批写入）
-        const offset = parseInt(config.offset) || 0;
+        // 飞书多维表格会使用 nextPageToken 作为下一次请求的 offset 参数
+        let offset = parseInt(config.offset) || 0;
         const limit = Math.min(parseInt(config.limit) || 1000, 1000);
+        
+        // 如果有 nextPageToken，则使用它作为 offset
+        if (config.nextPageToken) {
+            offset = parseInt(config.nextPageToken) || 0;
+        }
 
         // 判断数据源类型
         if (config.sqlserver) {

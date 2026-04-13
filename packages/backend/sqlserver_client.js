@@ -57,15 +57,31 @@ class SqlServerClient {
   /**
    * 执行 SQL 查询
    */
-  async executeQuery(query, params = {}) {
+  async executeQuery(query, params = {}, limit = null, offset = 0) {
     try {
+      // 如果提供了分页参数，在SQL层面实现分页
+      let finalQuery = query;
+      if (limit !== null) {
+        // SQL Server 使用 OFFSET ... FETCH NEXT ... 语法实现分页
+        // 需要确保查询有 ORDER BY 子句
+        if (!query.toUpperCase().includes('ORDER BY')) {
+          // 如果没有 ORDER BY，添加一个默认的排序
+          finalQuery = `SELECT * FROM (${query}) AS subquery ORDER BY (SELECT 1) OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY`;
+        } else {
+          // 如果已经有 ORDER BY，直接添加分页子句
+          finalQuery = `${query} OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY`;
+        }
+      }
+      
       // 尝试从缓存获取（简单查询）
       if (Object.keys(params).length === 0) {
         const cacheKey = {
           dataSourceType: 'sqlserver',
           server: this.config.server,
           database: this.config.database,
-          sql: query
+          sql: finalQuery,
+          limit: limit,
+          offset: offset
         };
         const cachedData = cacheManager.get(cacheKey);
         if (cachedData) {
@@ -75,7 +91,7 @@ class SqlServerClient {
         const pool = await this.getPool();
         const request = pool.request();
 
-        const result = await request.query(query);
+        const result = await request.query(finalQuery);
         const data = result.recordset || [];
         
         // 缓存结果
@@ -91,7 +107,7 @@ class SqlServerClient {
           request.input(key, params[key]);
         });
 
-        const result = await request.query(query);
+        const result = await request.query(finalQuery);
         return result.recordset || [];
       }
     } catch (error) {

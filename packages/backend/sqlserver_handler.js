@@ -159,16 +159,12 @@ async function getSqlServerTableRecords(config, fields, offset, limit) {
     
     // 如果提供了自定义 SQL，则执行自定义查询
     if (config.sql) {
-      data = await client.executeQuery(config.sql);
+      // 在SQL层面实现分页，避免内存溢出
+      data = await client.executeQuery(config.sql, {}, batchSize, batchOffset);
       
-      // 对于自定义 SQL，需要手动实现分页
-      const startIndex = batchOffset;
-      const endIndex = Math.min(batchOffset + batchSize, data.length);
-      data = data.slice(startIndex, endIndex);
-      
-      // 判断是否还有更多数据
-      const hasMore = endIndex < data.length;
-      const nextPageToken = hasMore ? String(endIndex) : '';
+      // 判断是否还有更多数据：如果返回的数据量等于批次大小，说明可能还有更多
+      const hasMore = data.length >= batchSize;
+      const nextPageToken = hasMore ? String(batchOffset + batchSize) : '';
       
       // 如果没有提供字段定义，先获取表元数据
       if (!fields) {

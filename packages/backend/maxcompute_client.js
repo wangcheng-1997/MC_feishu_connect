@@ -645,14 +645,23 @@ class MaxComputeClient {
     }
   }
 
-  async executeSQL(sql) {
+  async executeSQL(sql, limit = null, offset = 0) {
     try {
+      // 如果提供了分页参数，在SQL层面实现分页
+      let finalSQL = sql;
+      if (limit !== null) {
+        // MaxCompute 使用 LIMIT ... OFFSET ... 语法实现分页
+        finalSQL = `${sql} LIMIT ${limit} OFFSET ${offset}`;
+      }
+      
       // 尝试从缓存获取
       const cacheKey = {
         dataSourceType: 'maxcompute',
         endpoint: this.endpoint,
         projectName: this.projectName,
-        sql: sql
+        sql: finalSQL,
+        limit: limit,
+        offset: offset
       };
       const cachedData = cacheManager.get(cacheKey);
       if (cachedData) {
@@ -664,7 +673,7 @@ class MaxComputeClient {
         projectName: this.projectName,
         accessId: this.accessId,
         accessKey: this.accessKey,
-        sql: sql
+        sql: finalSQL
       });
 
       if (result.success) {
