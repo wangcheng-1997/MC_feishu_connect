@@ -114,7 +114,7 @@ def execute_sql(endpoint, project_name, access_id, access_key, sql):
     except Exception as e:
         return {'success': False, 'message': str(e)}
 
-def get_table_data(endpoint, project_name, access_id, access_key, table_name, limit=1000, offset=0):
+def get_table_data(endpoint, project_name, access_id, access_key, table_name):
     try:
         odps = get_connection(endpoint, project_name, access_id, access_key)
         
@@ -125,13 +125,8 @@ def get_table_data(endpoint, project_name, access_id, access_key, table_name, li
             row_count = 0
             schema = reader.schema
             
-            # 跳过 offset 行
-            for i, record in enumerate(reader):
-                if i < offset:
-                    continue
-                if row_count >= limit:
-                    break
-                    
+            # 读取所有数据
+            for record in reader:
                 record_dict = {}
                 for j, col in enumerate(schema.columns):
                     val = record[j]
@@ -159,7 +154,6 @@ def handle_command(command):
         access_key = command.get('access_key')
         table_name = command.get('table_name', '')
         sql = command.get('sql', '')
-        offset = command.get('offset', 0)
         
         if action == 'test_connection':
             result = test_connection(endpoint, project, access_id, access_key)
@@ -170,7 +164,7 @@ def handle_command(command):
         elif action == 'execute_sql':
             result = execute_sql(endpoint, project, access_id, access_key, sql)
         elif action == 'get_table_data':
-            result = get_table_data(endpoint, project, access_id, access_key, table_name, 1000, offset)
+            result = get_table_data(endpoint, project, access_id, access_key, table_name)
         else:
             result = {'success': False, 'message': f'未知操作: {action}'}
         
@@ -229,9 +223,9 @@ if __name__ == '__main__':
             elif args.action == 'get_table_meta':
                 result = get_table_meta(args.endpoint, args.project, args.access_id, args.access_key, args.table_name)
             elif args.action == 'execute_sql':
-                result = execute_sql(args.endpoint, args.project, args.access_id, args.access_key, args.sql, args.limit)
+                result = execute_sql(args.endpoint, args.project, args.access_id, args.access_key, args.sql)
             elif args.action == 'get_table_data':
-                result = get_table_data(args.endpoint, args.project, args.access_id, args.access_key, args.table_name, args.limit, args.offset)
+                result = get_table_data(args.endpoint, args.project, args.access_id, args.access_key, args.table_name)
             else:
                 result = {'success': False, 'message': f'未知操作: {args.action}'}
             

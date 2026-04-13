@@ -119,9 +119,9 @@ def execute_sql(endpoint, project_name, access_id, access_key, sql, limit=1000):
     except Exception as e:
         return {'success': False, 'message': str(e)}
 
-def get_table_data(endpoint, project_name, access_id, access_key, table_name, limit=1000, offset=0):
-    sql = f"SELECT * FROM {table_name} LIMIT {limit} OFFSET {offset}"
-    return execute_sql(endpoint, project_name, access_id, access_key, sql, limit)
+def get_table_data(endpoint, project_name, access_id, access_key, table_name):
+    sql = f"SELECT * FROM {table_name}"
+    return execute_sql(endpoint, project_name, access_id, access_key, sql)
 
 def handle_command(command):
     try:
@@ -132,8 +132,6 @@ def handle_command(command):
         access_key = command.get('access_key')
         table_name = command.get('table_name', '')
         sql = command.get('sql', '')
-        limit = command.get('limit', 1000)
-        offset = command.get('offset', 0)
         
         if action == 'test_connection':
             result = test_connection(endpoint, project, access_id, access_key)
@@ -142,9 +140,9 @@ def handle_command(command):
         elif action == 'get_table_meta':
             result = get_table_meta(endpoint, project, access_id, access_key, table_name)
         elif action == 'execute_sql':
-            result = execute_sql(endpoint, project, access_id, access_key, sql, limit)
+            result = execute_sql(endpoint, project, access_id, access_key, sql)
         elif action == 'get_table_data':
-            result = get_table_data(endpoint, project, access_id, access_key, table_name, limit, offset)
+            result = get_table_data(endpoint, project, access_id, access_key, table_name)
         else:
             result = {'success': False, 'message': f'未知操作: {action}'}
         
@@ -597,7 +595,12 @@ class MaxComputeClient {
     }
   }
 
-  async getTableData(tableName, limit = 1000, offset = 0) {
+  /**
+   * 获取表数据
+   * @param {string} tableName - 表名
+   * @returns {Promise<Array>} 表数据数组
+   */
+  async getTableData(tableName) {
     try {
       // 尝试从缓存获取
       const cacheKey = {
@@ -616,9 +619,7 @@ class MaxComputeClient {
         projectName: this.projectName,
         accessId: this.accessId,
         accessKey: this.accessKey,
-        tableName: tableName,
-        limit: limit,
-        offset: offset
+        tableName: tableName
       });
 
       if (result.success) {

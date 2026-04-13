@@ -30,10 +30,10 @@ class DataSourceInterface {
 
   /**
    * 获取表数据
-   * @param {string} tableName - 表名
-   * @param {number} limit - 限制数量
-   * @param {number} offset - 偏移量
-   * @returns {Promise<any>}
+   * 注意：MaxCompute 不支持 limit 和 offset 参数，   * @param {string} tableName - 表名
+   * @param {number} limit - 每次获取记录数限制（仅 SQL Server 支持）
+   * @param {number} offset - 偏移量（仅 SQL Server 支持）
+   * @returns {Promise<Array>}
    */
   async getTableData(tableName, limit = 1000, offset = 0) {
     throw new Error('getTableData method must be implemented');
