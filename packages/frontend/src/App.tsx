@@ -31,7 +31,6 @@ interface MaxComputeConfig {
     tableName: string;
     primaryField: string;
     sql: string;
-    limit: number;
 }
 
 // SQL Server 配置接口
@@ -183,7 +182,6 @@ export default function App() {
                         tableName: values.tableName,
                         primaryField: values.primaryField,
                         sql: values.sql || "",
-                        limit: values.limit || 1000,
                     },
                 };
             } else {
@@ -599,14 +597,16 @@ export default function App() {
                         />
                     </Form.Item>
 
-                    <Form.Item
-                        label="批量处理记录数"
-                        name="limit"
-                        tooltip="每次批量处理的最大记录数，系统会自动处理所有数据"
-                        initialValue={1000}
-                    >
-                        <Input type="number" placeholder="1000" />
-                    </Form.Item>
+                    {dataSourceType === "sqlserver" && (
+                        <Form.Item
+                            label="批量处理记录数"
+                            name="limit"
+                            tooltip="每次批量处理的最大记录数，系统会自动处理所有数据"
+                            initialValue={1000}
+                        >
+                            <Input type="number" placeholder="1000" />
+                        </Form.Item>
+                    )}
 
                     <Divider />
 

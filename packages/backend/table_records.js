@@ -14,8 +14,6 @@ const { generateTableRecords, generateTableMeta } = require('./maxcompute_adapte
  * @param {string} config.tableName - 要同步的表名
  * @param {string} config.schemaName - Schema 名称（可选）
  * @param {string} config.sql - 自定义 SQL 查询（可选）
- * @param {number} config.limit - 每次获取记录数限制（默认 1000）
- * @param {number} config.offset - 偏移量（用于分页）
  * @param {Object} fields - 字段定义（用于数据转换）
  * @returns {Object} 飞书多维表格格式的记录数据
  */
