@@ -15,27 +15,49 @@ const { generateTableRecords, generateTableMeta } = require('./maxcompute_adapte
  * @param {string} config.schemaName - Schema 名称（可选）
  * @param {string} config.sql - 自定义 SQL 查询（可选）
  * @param {Object} fields - 字段定义（用于数据转换）
+ * @param {number} offset - 偏移量（用于分批，默认0）
+ * @param {number} limit - 每批记录数（默认1000，最大1000）
  * @returns {Object} 飞书多维表格格式的记录数据
  */
-async function getTableRecordsFromMaxCompute(config, fields) {
+async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit = 1000) {
   try {
     const client = new MaxComputeClient(config);
     
+    // 确保 limit 不超过 1000（飞书表格限制）
+    const batchSize = Math.min(limit, 1000);
+    
     let data;
     
-    // 如果提供了自定义 SQL，则执行自定义查询（不添加额外的 limit 和 offset）
+    // 如果提供了自定义 SQL，则执行自定义查询
     if (config.sql) {
-      data = await client.executeSQL(config.sql);
+      // 对于自定义 SQL，需要手动实现分页
+      const allData = await client.executeSQL(config.sql);
+      
+      // 应用分页逻辑
+      const startIndex = offset;
+      const endIndex = Math.min(offset + batchSize, allData.length);
+      data = allData.slice(startIndex, endIndex);
+      
+      // 判断是否还有更多数据
+      const hasMore = endIndex < allData.length;
+      const nextPageToken = hasMore ? String(endIndex) : '';
+      
+      return generateTableRecords(data, fields, hasMore, nextPageToken);
     } else {
-      // 否则查询整个表（使用默认的 limit 和 offset）
-      data = await client.getTableData(config.tableName);
+      // 否则查询整个表
+      const allData = await client.getTableData(config.tableName);
+      
+      // 应用分页逻辑
+      const startIndex = offset;
+      const endIndex = Math.min(offset + batchSize, allData.length);
+      data = allData.slice(startIndex, endIndex);
+      
+      // 判断是否还有更多数据
+      const hasMore = endIndex < allData.length;
+      const nextPageToken = hasMore ? String(endIndex) : '';
+      
+      return generateTableRecords(data, fields, hasMore, nextPageToken);
     }
-    
-    // 转换数据格式
-    const hasMore = false;
-    const nextPageToken = '';
-    
-    return generateTableRecords(data, fields, hasMore, nextPageToken);
   } catch (error) {
     console.error('获取 MaxCompute 表记录失败:', error);
     // 返回默认数据作为 fallback
@@ -90,6 +112,8 @@ function getDefaultTableRecords() {
  * 根据请求参数返回表记录数据
  * 
  * @param {Object} reqBody - 请求体，包含 MaxCompute 配置和字段定义
+ * @param {number} reqBody.offset - 偏移量（用于分批，默认0）
+ * @param {number} reqBody.limit - 每批记录数（默认1000，最大1000）
  * @returns {Object} 表记录数据
  */
 async function getTableRecords(reqBody = {}) {
@@ -103,7 +127,11 @@ async function getTableRecords(reqBody = {}) {
       fields = meta.fields;
     }
     
-    return await getTableRecordsFromMaxCompute(reqBody.maxcompute, fields);
+    // 获取分页参数
+    const offset = parseInt(reqBody.offset) || 0;
+    const limit = Math.min(parseInt(reqBody.limit) || 1000, 1000);
+    
+    return await getTableRecordsFromMaxCompute(reqBody.maxcompute, fields, offset, limit);
   }
   
   // 否则返回默认数据

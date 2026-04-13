@@ -142,36 +142,57 @@ async function getSqlServerTableMeta(config) {
  * 
  * @param {Object} config - SQL Server 连接配置
  * @param {Object} fields - 字段定义（用于数据转换）
+ * @param {number} offset - 偏移量（用于分批，默认从 config.offset 或 0）
+ * @param {number} limit - 每批记录数（默认从 config.limit 或 1000，最大1000）
  * @returns {Object} 飞书多维表格格式的记录数据
  */
-async function getSqlServerTableRecords(config, fields) {
+async function getSqlServerTableRecords(config, fields, offset, limit) {
   const client = new SqlServerClient(config);
   
   try {
     let data;
     const schema = config.schema || 'dbo';
     
+    // 获取分页参数
+    const batchSize = Math.min(limit || config.limit || 1000, 1000);
+    const batchOffset = offset !== undefined ? offset : (config.offset || 0);
+    
     // 如果提供了自定义 SQL，则执行自定义查询
     if (config.sql) {
       data = await client.executeQuery(config.sql);
+      
+      // 对于自定义 SQL，需要手动实现分页
+      const startIndex = batchOffset;
+      const endIndex = Math.min(batchOffset + batchSize, data.length);
+      data = data.slice(startIndex, endIndex);
+      
+      // 判断是否还有更多数据
+      const hasMore = endIndex < data.length;
+      const nextPageToken = hasMore ? String(endIndex) : '';
+      
+      // 如果没有提供字段定义，先获取表元数据
+      if (!fields) {
+        const meta = await getSqlServerTableMeta(config);
+        fields = meta.fields;
+      }
+      
+      return generateTableRecords(data, fields, hasMore, nextPageToken);
     } else {
       // 否则查询整个表
-      const limit = config.limit || 1000;
-      const offset = config.offset || 0;
-      data = await client.getTableData(config.tableName, schema, limit, offset);
+      data = await client.getTableData(config.tableName, schema, batchSize, batchOffset);
+      
+      // 判断是否还有更多数据
+      const hasMore = data.length >= batchSize;
+      const nextPageToken = hasMore ? String(batchOffset + batchSize) : '';
+      
+      // 如果没有提供字段定义，先获取表元数据
+      if (!fields) {
+        const meta = await getSqlServerTableMeta(config);
+        fields = meta.fields;
+      }
+      
+      return generateTableRecords(data, fields, hasMore, nextPageToken);
     }
-    
-    // 如果没有提供字段定义，先获取表元数据
-    if (!fields) {
-      const meta = await getSqlServerTableMeta(config);
-      fields = meta.fields;
-    }
-    
-    // 转换数据格式
-    const hasMore = data.length >= (config.limit || 1000);
-    const nextPageToken = hasMore ? String((config.offset || 0) + (config.limit || 1000)) : '';
-    
-    return generateTableRecords(data, fields, hasMore, nextPageToken);
   } catch (error) {
     console.error('获取 SQL Server 表记录失败:', error);
     // 返回默认数据作为 fallback

@@ -195,11 +195,9 @@ app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
 /**
  * 获取表记录数据接口
  * 支持 MaxCompute 和 SQL Server
+ * 支持分批写入（每批最多1000条记录）
  */
 app.post("/api/records", validateRequestSignature, async (req, res) => {
-    console.log("========== records 请求 ==========");
-    console.log("请求体 keys:", Object.keys(req.body));
-
     try {
         let data;
 
@@ -214,18 +212,28 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
             }
         }
 
+        // 获取分页参数（用于分批写入）
+        const offset = parseInt(config.offset) || 0;
+        const limit = Math.min(parseInt(config.limit) || 1000, 1000);
+
         // 判断数据源类型
         if (config.sqlserver) {
             // SQL Server 数据源
-            console.log("→ 使用 SQL Server 数据源");
             data = await getSqlServerTableRecords(
                 config.sqlserver,
                 config.fields,
+                offset,
+                limit
             );
         } else {
             // MaxCompute 数据源（默认）
-            console.log("→ 使用 MaxCompute 数据源");
-            data = await getTableRecords(config);
+            // 将分页参数传递给 getTableRecords
+            const configWithPaging = {
+                ...config,
+                offset: offset,
+                limit: limit
+            };
+            data = await getTableRecords(configWithPaging);
         }
 
         const result = {
