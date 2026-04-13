@@ -1,7 +1,6 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const cacheManager = require('./cache_manager.js');
 
 const PYODPS_SCRIPT = `
 import sys
@@ -603,24 +602,7 @@ class MaxComputeClient {
 
   async getTableData(tableName, limit = null, offset = 0) {
     try {
-      const cacheKey = {
-        dataSourceType: 'maxcompute',
-        endpoint: this.endpoint,
-        projectName: this.projectName,
-        tableName: tableName,
-        limit: limit,
-        offset: offset
-      };
-      
-      console.log(`[getTableData缓存键] tableName=${tableName}, offset=${offset}, limit=${limit}`);
-      
-      const cachedData = cacheManager.get(cacheKey);
-      if (cachedData) {
-        console.log(`[getTableData缓存命中] 返回${cachedData.length}条数据`);
-        return cachedData;
-      }
-
-      console.log(`[getTableData缓存未命中，执行查询...`);
+      console.log(`[getTableData] tableName=${tableName}, offset=${offset}, limit=${limit}`);
 
       const result = await runPyOdps('get_table_data', {
         endpoint: this.endpoint,
@@ -635,7 +617,6 @@ class MaxComputeClient {
       if (result.success) {
         const data = result.data || [];
         console.log(`[getTableData查询完成] 返回${data.length}条数据`);
-        cacheManager.set(cacheKey, data);
         return data;
       } else {
         let errorMessage = result.message || '获取表数据失败';
@@ -661,24 +642,7 @@ class MaxComputeClient {
         finalSQL = `${sql} LIMIT ${limit} OFFSET ${offset}`;
       }
       
-      const cacheKey = {
-        dataSourceType: 'maxcompute',
-        endpoint: this.endpoint,
-        projectName: this.projectName,
-        sql: finalSQL,
-        limit: limit,
-        offset: offset
-      };
-      
-      console.log(`[executeSQL缓存键] offset=${offset}, limit=${limit}, sql长度=${finalSQL.length}`);
-      
-      const cachedData = cacheManager.get(cacheKey);
-      if (cachedData) {
-        console.log(`[executeSQL缓存命中] 返回${cachedData.length}条数据`);
-        return cachedData;
-      }
-
-      console.log(`[executeSQL缓存未命中，执行查询...`);
+      console.log(`[executeSQL] offset=${offset}, limit=${limit}, sql长度=${finalSQL.length}`);
       
       const result = await runPyOdps('execute_sql', {
         endpoint: this.endpoint,
@@ -690,11 +654,9 @@ class MaxComputeClient {
         offset: offset
       });
 
-      
       if (result.success) {
         const data = result.data || [];
         console.log(`[executeSQL查询完成] 返回${data.length}条数据`);
-        cacheManager.set(cacheKey, data);
         return data;
       } else {
         // 解析错误信息
