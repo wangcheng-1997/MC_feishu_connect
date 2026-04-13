@@ -130,9 +130,6 @@ function parseLarkParams(body) {
                 if (params.nextPageToken) {
                     config.nextPageToken = params.nextPageToken;
                 }
-                if (params.maxPageSize) {
-                    config.limit = params.maxPageSize;
-                }
                 
                 return config;
             }
@@ -227,6 +224,8 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         // limit 优先级：顶层 limit > maxcompute.limit/sqlserver.limit > 默认 1000
         let limit = parseInt(config.limit) || parseInt(config.maxcompute?.limit) || parseInt(config.sqlserver?.limit) || 1000;
         limit = Math.min(limit, 1000); // 最大 1000
+        
+        console.log(`[limit解析] config.limit=${config.limit}, maxcompute.limit=${config.maxcompute?.limit}, 最终limit=${limit}`);
         
         // 如果有 pageToken 或 nextPageToken，则使用它作为 offset
         // 支持两种参数名以确保兼容性

@@ -25,10 +25,14 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
     
     const batchSize = Math.min(limit, 1000);
     
+    console.log(`[getTableRecordsFromMaxCompute] offset=${offset}, limit=${limit}, batchSize=${batchSize}`);
+    
     let data;
     
     if (config.sql) {
       data = await client.executeSQL(config.sql, batchSize, offset);
+      
+      console.log(`[executeSQL返回] data.length=${data.length}, batchSize=${batchSize}, hasMore=${data.length === batchSize}`);
       
       const hasMore = data.length === batchSize;
       const nextPageToken = hasMore ? String(offset + batchSize) : '';
@@ -36,6 +40,8 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
       return generateTableRecords(data, fields, hasMore, nextPageToken);
     } else {
       data = await client.getTableData(config.tableName, batchSize, offset);
+      
+      console.log(`[getTableData返回] data.length=${data.length}, batchSize=${batchSize}, hasMore=${data.length === batchSize}`);
       
       const hasMore = data.length === batchSize;
       const nextPageToken = hasMore ? String(offset + batchSize) : '';

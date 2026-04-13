@@ -611,10 +611,16 @@ class MaxComputeClient {
         limit: limit,
         offset: offset
       };
+      
+      console.log(`[getTableData缓存键] tableName=${tableName}, offset=${offset}, limit=${limit}`);
+      
       const cachedData = cacheManager.get(cacheKey);
       if (cachedData) {
+        console.log(`[getTableData缓存命中] 返回${cachedData.length}条数据`);
         return cachedData;
       }
+
+      console.log(`[getTableData缓存未命中，执行查询...`);
 
       const result = await runPyOdps('get_table_data', {
         endpoint: this.endpoint,
@@ -628,6 +634,7 @@ class MaxComputeClient {
 
       if (result.success) {
         const data = result.data || [];
+        console.log(`[getTableData查询完成] 返回${data.length}条数据`);
         cacheManager.set(cacheKey, data);
         return data;
       } else {
@@ -649,14 +656,11 @@ class MaxComputeClient {
 
   async executeSQL(sql, limit = null, offset = 0) {
     try {
-      // 如果提供了分页参数，在SQL层面实现分页
       let finalSQL = sql;
       if (limit !== null) {
-        // MaxCompute 使用 LIMIT ... OFFSET ... 语法实现分页
         finalSQL = `${sql} LIMIT ${limit} OFFSET ${offset}`;
       }
       
-      // 尝试从缓存获取
       const cacheKey = {
         dataSourceType: 'maxcompute',
         endpoint: this.endpoint,
@@ -665,11 +669,17 @@ class MaxComputeClient {
         limit: limit,
         offset: offset
       };
+      
+      console.log(`[executeSQL缓存键] offset=${offset}, limit=${limit}, sql长度=${finalSQL.length}`);
+      
       const cachedData = cacheManager.get(cacheKey);
       if (cachedData) {
+        console.log(`[executeSQL缓存命中] 返回${cachedData.length}条数据`);
         return cachedData;
       }
 
+      console.log(`[executeSQL缓存未命中，执行查询...`);
+      
       const result = await runPyOdps('execute_sql', {
         endpoint: this.endpoint,
         projectName: this.projectName,
@@ -680,9 +690,10 @@ class MaxComputeClient {
         offset: offset
       });
 
+      
       if (result.success) {
         const data = result.data || [];
-        // 缓存结果
+        console.log(`[executeSQL查询完成] 返回${data.length}条数据`);
         cacheManager.set(cacheKey, data);
         return data;
       } else {
