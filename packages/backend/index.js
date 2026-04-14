@@ -319,7 +319,9 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
                 maxcompute: config.maxcompute,
                 fields: config.fields,
                 offset: offset,
-                limit: limit
+                limit: limit,
+                pageToken: config.pageToken,
+                nextPageToken: config.nextPageToken,
             };
             console.log(`[分页执行] source=maxcompute, offset=${offset}, limit=${limit}`);
             data = await getTableRecords(configWithPaging);

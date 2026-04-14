@@ -1,6 +1,15 @@
 const { MaxComputeClient } = require('./maxcompute_client_fixed.js');
 const { generateTableRecords } = require('./maxcompute_adapter.js');
 const { getSqlServerTableRecords } = require('./sqlserver_handler.js');
+const {
+  buildPageToken,
+  parsePageToken,
+  buildQuerySignature,
+  createTask,
+  getTaskPage,
+  setTaskPage,
+  cleanupExpiredTasks,
+} = require('./maxcompute_file_cache.js');
 
 function ensureFields(fields) {
   if (Array.isArray(fields) && fields.length > 0) {
@@ -27,36 +36,62 @@ function ensureFields(fields) {
  * @param {number} limit - 每批记录数（默认1000，最大1000）
  * @returns {Object} 飞书多维表格格式的记录数据
  */
-async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit = 1000) {
+async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit = 1000, pageToken = '') {
   try {
     const client = new MaxComputeClient(config);
     const normalizedFields = ensureFields(fields);
+    const querySignature = buildQuerySignature(config);
     
     const batchSize = Math.min(limit, 1000);
     
     console.log(`[getTableRecordsFromMaxCompute] offset=${offset}, limit=${limit}, batchSize=${batchSize}`);
-    
-    let data;
-    
-    if (config.sql) {
-      data = await client.executeSQL(config.sql, batchSize, offset);
-      
-      console.log(`[executeSQL返回] data.length=${data.length}, batchSize=${batchSize}, hasMore=${data.length === batchSize}`);
-      
-      const hasMore = data.length === batchSize;
-      const nextPageToken = hasMore ? String(offset + batchSize) : '';
-      
-      return generateTableRecords(data, normalizedFields, hasMore, nextPageToken, offset);
-    } else {
-      data = await client.getTableData(config.tableName, batchSize, offset);
-      
-      console.log(`[getTableData返回] data.length=${data.length}, batchSize=${batchSize}, hasMore=${data.length === batchSize}`);
-      
-      const hasMore = data.length === batchSize;
-      const nextPageToken = hasMore ? String(offset + batchSize) : '';
-      
-      return generateTableRecords(data, normalizedFields, hasMore, nextPageToken, offset);
+    await cleanupExpiredTasks();
+
+    const tokenInfo = parsePageToken(pageToken);
+    if (tokenInfo) {
+      const pageOffset = tokenInfo.offset;
+      let taskId = tokenInfo.taskId;
+      let page = null;
+      try {
+        const taskPage = await getTaskPage(tokenInfo.taskId, pageOffset, querySignature);
+        page = taskPage.page;
+      } catch (cacheError) {
+        console.warn(`[cacheMiss] ${cacheError.message}, recreate task for offset=${pageOffset}`);
+        const recreatedTask = await createTask(querySignature);
+        taskId = recreatedTask.taskId;
+      }
+
+      if (page) {
+        const nextPageToken = page.hasMore ? buildPageToken(taskId, pageOffset + batchSize) : '';
+        return generateTableRecords(page.rows, normalizedFields, page.hasMore, nextPageToken, pageOffset);
+      }
+
+      let pageRows;
+      if (config.sql) {
+        pageRows = await client.executeSQL(config.sql, batchSize, pageOffset);
+      } else {
+        pageRows = await client.getTableData(config.tableName, batchSize, pageOffset);
+      }
+      const hasMore = Array.isArray(pageRows) && pageRows.length === batchSize;
+      await setTaskPage(taskId, pageOffset, pageRows, hasMore);
+      const nextPageToken = hasMore ? buildPageToken(taskId, pageOffset + batchSize) : '';
+      return generateTableRecords(pageRows, normalizedFields, hasMore, nextPageToken, pageOffset);
     }
+
+    const pageOffset = Math.max(parseInt(offset, 10) || 0, 0);
+    const task = await createTask(querySignature);
+    let pageRows;
+    if (config.sql) {
+      pageRows = await client.executeSQL(config.sql, batchSize, pageOffset);
+    } else {
+      pageRows = await client.getTableData(config.tableName, batchSize, pageOffset);
+    }
+    const hasMore = Array.isArray(pageRows) && pageRows.length === batchSize;
+    await setTaskPage(task.taskId, pageOffset, pageRows, hasMore);
+    const nextPageToken = hasMore ? buildPageToken(task.taskId, pageOffset + batchSize) : '';
+
+    console.log(`[cacheTask] taskId=${task.taskId}, pageOffset=${pageOffset}, pageSize=${Array.isArray(pageRows) ? pageRows.length : 0}, hasMore=${hasMore}`);
+    return generateTableRecords(pageRows, normalizedFields, hasMore, nextPageToken, pageOffset);
   } catch (error) {
     console.error('获取 MaxCompute 表记录失败:', error.message);
     throw error;
@@ -128,8 +163,9 @@ async function getTableRecords(reqBody = {}) {
     // 获取分页参数
     const offset = parseInt(reqBody.offset) || 0;
     const limit = Math.min(parseInt(reqBody.limit) || 1000, 1000);
+    const pageToken = reqBody.pageToken || reqBody.nextPageToken || '';
     
-    return await getTableRecordsFromMaxCompute(reqBody.maxcompute, fields, offset, limit);
+    return await getTableRecordsFromMaxCompute(reqBody.maxcompute, fields, offset, limit, pageToken);
   }
   
   // 如果请求中包含 SQL Server 配置
