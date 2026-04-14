@@ -223,6 +223,8 @@ class PythonProcessManager {
     this.activeTask = null;
     this.nextRequestId = 1;
     this.pythonCommand = this._detectPythonCommand();
+    this._startPromise = null;
+    this._handlersBound = false;
   }
 
   _detectPythonCommand() {
@@ -231,7 +233,14 @@ class PythonProcessManager {
   }
 
   _startProcess() {
-    return new Promise((resolve, reject) => {
+    if (this.process) {
+      return Promise.resolve(true);
+    }
+    if (this._startPromise) {
+      return this._startPromise;
+    }
+
+    this._startPromise = new Promise((resolve, reject) => {
       console.log('启动 Python 进程...');
       
       const proc = spawn(this.pythonCommand, [PYODPS_SCRIPT_PATH, '--daemon'], {
@@ -241,15 +250,21 @@ class PythonProcessManager {
 
       let stdout = '';
       let stderr = '';
+      let readyResolved = false;
 
-      proc.stdout.on('data', (data) => {
+      const onReadyData = (data) => {
         stdout += data.toString();
-        if (stdout.includes('DAEMON_READY')) {
+        if (!readyResolved && stdout.includes('DAEMON_READY')) {
+          readyResolved = true;
+          proc.stdout.off('data', onReadyData);
           this.process = proc;
+          this._handlersBound = false;
           this._setupProcessHandlers();
           resolve(true);
         }
-      });
+      };
+
+      proc.stdout.on('data', onReadyData);
 
       proc.stderr.on('data', (data) => {
         const chunk = data.toString();
@@ -260,6 +275,7 @@ class PythonProcessManager {
       proc.on('close', (code) => {
         console.log('Python 进程关闭，退出码:', code);
         this.process = null;
+        this._handlersBound = false;
         if (!stdout.includes('DAEMON_READY')) {
           reject(new Error(`Python 进程启动失败: ${stderr}`));
         }
@@ -276,7 +292,8 @@ class PythonProcessManager {
   }
 
   _setupProcessHandlers() {
-    if (!this.process) return;
+    if (!this.process || this._handlersBound) return;
+    this._handlersBound = true;
 
     let buffer = '';
 
@@ -287,6 +304,9 @@ class PythonProcessManager {
       for (let i = 0; i < lines.length - 1; i++) {
         const line = lines[i].trim();
         if (line) {
+          if (line === 'DAEMON_READY') {
+            continue;
+          }
           this._handleResponse(line);
         }
       }
@@ -302,6 +322,7 @@ class PythonProcessManager {
     this.process.on('close', (code) => {
       console.log('Python 进程关闭，退出码:', code);
       this.process = null;
+      this._handlersBound = false;
       if (this.activeTask) {
         const task = this.activeTask;
         this.activeTask = null;
@@ -352,7 +373,11 @@ class PythonProcessManager {
     this._sendCommand({
       ...task.command,
       request_id: task.requestId,
+    }).finally(() => {
+      this._startPromise = null;
     });
+
+    return this._startPromise;
   }
 
   _sendCommand(command) {
@@ -446,10 +471,15 @@ class PythonProcessManager {
   }
 
   _handleResponse(response) {
+    const trimmed = String(response || '').trim();
+    if (!trimmed || (trimmed[0] !== '{' && trimmed[0] !== '[')) {
+      return;
+    }
+
     let result;
 
     try {
-      result = JSON.parse(response);
+      result = JSON.parse(trimmed);
     } catch (error) {
       console.error(`JSON parse error, length=${String(response || '').length}`);
       if (this.activeTask) {
@@ -538,7 +568,11 @@ class PythonProcessManager {
       }, PYODPS_COMMAND_TIMEOUT_MS);
 
       this._processQueue();
+    }).finally(() => {
+      this._startPromise = null;
     });
+
+    return this._startPromise;
   }
 
   close() {
