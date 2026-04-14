@@ -121,6 +121,7 @@ function convertColumnsToLarkFields(columns, primaryField = null) {
       fieldName: col.Name,
       fieldType: fieldType,
       isPrimary: primaryField ? col.Name === primaryField : index === 0,
+      isExplicitPrimary: Boolean(primaryField) && col.Name === primaryField,
       description: col.Comment || '',
       property: getFieldProperty(col.Type, col),
     };
@@ -183,7 +184,7 @@ function convertDataToLarkRecords(data, fields, offset = 0) {
   }
 
   const primaryField = Array.isArray(fields)
-    ? fields.find(field => field && field.isPrimary && field.fieldName)
+    ? fields.find(field => field && field.isExplicitPrimary && field.fieldName)
     : null;
 
   return data.map((row, rowIndex) => {
