@@ -127,7 +127,16 @@ async function getTableRecords(reqBody = {}) {
   if (reqBody && reqBody.maxcompute) {
     // 如果没有提供字段定义，先获取表元数据
     let fields = reqBody.fields;
-    
+    if (!fields || fields.length === 0) {
+      try {
+        const { getTableMetaFromMaxCompute } = require('./table_meta_fixed.js');
+        const meta = await getTableMetaFromMaxCompute(reqBody.maxcompute);
+        fields = meta.fields;
+      } catch (metaError) {
+        console.warn('[getTableRecords] MaxCompute metadata failed, fallback to infer fields from row:', metaError.message);
+      }
+    }
+
     // 获取分页参数
     const offset = parseInt(reqBody.offset) || 0;
     const limit = Math.min(parseInt(reqBody.limit) || 1000, 1000);
