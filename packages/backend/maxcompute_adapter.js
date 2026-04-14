@@ -168,14 +168,26 @@ function convertValueToLark(value, fieldType, odpsType) {
 /**
  * 将 MaxCompute 数据行转换为飞书多维表格记录格式
  */
-function convertDataToLarkRecords(data, fields) {
+function convertDataToLarkRecords(data, fields, offset = 0) {
   if (!Array.isArray(data) || data.length === 0) {
     return [];
   }
 
+  const primaryField = Array.isArray(fields)
+    ? fields.find(field => field && field.isPrimary && field.fieldName)
+    : null;
+
   return data.map((row, rowIndex) => {
+    let primaryId = `record_${offset + rowIndex + 1}`;
+    if (primaryField) {
+      const primaryValue = row[primaryField.fieldName];
+      if (primaryValue !== undefined && primaryValue !== null && String(primaryValue) !== '') {
+        primaryId = `pk_${String(primaryValue)}`;
+      }
+    }
+
     const record = {
-      primaryId: `record_${rowIndex + 1}`,
+      primaryId,
       data: {},
     };
 
@@ -203,8 +215,8 @@ function generateTableMeta(tableName, columns, primaryField = null) {
 /**
  * 生成表记录数据
  */
-function generateTableRecords(data, fields, hasMore = false, nextPageToken = '') {
-  const records = convertDataToLarkRecords(data, fields);
+function generateTableRecords(data, fields, hasMore = false, nextPageToken = '', offset = 0) {
+  const records = convertDataToLarkRecords(data, fields, offset);
   
   return {
     nextPageToken: nextPageToken,

@@ -38,7 +38,7 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
       const hasMore = data.length === batchSize;
       const nextPageToken = hasMore ? String(offset + batchSize) : '';
       
-      return generateTableRecords(data, fields, hasMore, nextPageToken);
+      return generateTableRecords(data, fields, hasMore, nextPageToken, offset);
     } else {
       data = await client.getTableData(config.tableName, batchSize, offset);
       
@@ -47,7 +47,7 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
       const hasMore = data.length === batchSize;
       const nextPageToken = hasMore ? String(offset + batchSize) : '';
       
-      return generateTableRecords(data, fields, hasMore, nextPageToken);
+      return generateTableRecords(data, fields, hasMore, nextPageToken, offset);
     }
   } catch (error) {
     console.error('获取 MaxCompute 表记录失败:', error);
