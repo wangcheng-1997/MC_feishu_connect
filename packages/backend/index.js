@@ -294,11 +294,25 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         
         // 如果有 pageToken 或 nextPageToken，则使用它作为 offset
         // 支持两种参数名以确保兼容性
+        const parseTokenOffset = (token) => {
+            if (token === undefined || token === null) return 0;
+            const tokenStr = String(token).trim();
+            if (!tokenStr) return 0;
+            if (tokenStr.includes(":")) {
+                const parts = tokenStr.split(":");
+                const tail = parts[parts.length - 1];
+                const parsed = parseInt(tail, 10);
+                return Number.isFinite(parsed) ? parsed : 0;
+            }
+            const parsed = parseInt(tokenStr, 10);
+            return Number.isFinite(parsed) ? parsed : 0;
+        };
+
         if (config.pageToken) {
-            offset = parseInt(config.pageToken) || 0;
+            offset = parseTokenOffset(config.pageToken);
             console.log(`[分页游标] 使用 pageToken, offset=${offset}`);
         } else if (config.nextPageToken) {
-            offset = parseInt(config.nextPageToken) || 0;
+            offset = parseTokenOffset(config.nextPageToken);
             console.log(`[分页游标] 使用 nextPageToken, offset=${offset}`);
         }
 

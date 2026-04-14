@@ -11,6 +11,13 @@ const {
   cleanupExpiredTasks,
 } = require('./maxcompute_file_cache.js');
 
+function logTaskStage(stage, details = {}) {
+  const parts = Object.entries(details)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => `${key}=${value}`);
+  console.log(`[maxcompute_sync] stage=${stage}${parts.length ? ` ${parts.join(' ')}` : ''}`);
+}
+
 function ensureFields(fields) {
   if (Array.isArray(fields) && fields.length > 0) {
     return fields;
@@ -45,54 +52,88 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
     const batchSize = Math.min(limit, 1000);
     
     console.log(`[getTableRecordsFromMaxCompute] offset=${offset}, limit=${limit}, batchSize=${batchSize}`);
+    logTaskStage('request_received', { offset, limit, batchSize, hasPageToken: Boolean(pageToken) });
     await cleanupExpiredTasks();
+    logTaskStage('cleanup_done');
 
     const tokenInfo = parsePageToken(pageToken);
     if (tokenInfo) {
       const pageOffset = tokenInfo.offset;
       let taskId = tokenInfo.taskId;
       let page = null;
+      logTaskStage('token_parsed', { taskId, pageOffset });
       try {
         const taskPage = await getTaskPage(tokenInfo.taskId, pageOffset, querySignature);
         page = taskPage.page;
+        logTaskStage('cache_lookup_done', { taskId, pageOffset, cacheHit: Boolean(page) });
       } catch (cacheError) {
         console.warn(`[cacheMiss] ${cacheError.message}, recreate task for offset=${pageOffset}`);
         const recreatedTask = await createTask(querySignature);
         taskId = recreatedTask.taskId;
+        logTaskStage('task_recreated', { oldTaskId: tokenInfo.taskId, taskId, pageOffset, reason: cacheError.message });
       }
 
       if (page) {
         const nextPageToken = page.hasMore ? buildPageToken(taskId, pageOffset + batchSize) : '';
+        logTaskStage('return_cached_page', {
+          taskId,
+          pageOffset,
+          pageSize: Array.isArray(page.rows) ? page.rows.length : 0,
+          hasMore: page.hasMore,
+          nextOffset: page.hasMore ? pageOffset + batchSize : '',
+        });
         return generateTableRecords(page.rows, normalizedFields, page.hasMore, nextPageToken, pageOffset);
       }
 
       let pageRows;
+      logTaskStage('source_fetch_start', { taskId, pageOffset, batchSize, mode: config.sql ? 'sql' : 'table' });
       if (config.sql) {
         pageRows = await client.executeSQL(config.sql, batchSize, pageOffset);
       } else {
         pageRows = await client.getTableData(config.tableName, batchSize, pageOffset);
       }
+      logTaskStage('source_fetch_done', { taskId, pageOffset, fetched: Array.isArray(pageRows) ? pageRows.length : 0 });
       const hasMore = Array.isArray(pageRows) && pageRows.length === batchSize;
       await setTaskPage(taskId, pageOffset, pageRows, hasMore);
+      logTaskStage('cache_write_done', { taskId, pageOffset, hasMore });
       const nextPageToken = hasMore ? buildPageToken(taskId, pageOffset + batchSize) : '';
+      logTaskStage('return_fetched_page', {
+        taskId,
+        pageOffset,
+        pageSize: Array.isArray(pageRows) ? pageRows.length : 0,
+        hasMore,
+        nextOffset: hasMore ? pageOffset + batchSize : '',
+      });
       return generateTableRecords(pageRows, normalizedFields, hasMore, nextPageToken, pageOffset);
     }
 
     const pageOffset = Math.max(parseInt(offset, 10) || 0, 0);
     const task = await createTask(querySignature);
+    logTaskStage('task_created', { taskId: task.taskId, pageOffset });
     let pageRows;
+    logTaskStage('source_fetch_start', { taskId: task.taskId, pageOffset, batchSize, mode: config.sql ? 'sql' : 'table' });
     if (config.sql) {
       pageRows = await client.executeSQL(config.sql, batchSize, pageOffset);
     } else {
       pageRows = await client.getTableData(config.tableName, batchSize, pageOffset);
     }
+    logTaskStage('source_fetch_done', { taskId: task.taskId, pageOffset, fetched: Array.isArray(pageRows) ? pageRows.length : 0 });
     const hasMore = Array.isArray(pageRows) && pageRows.length === batchSize;
     await setTaskPage(task.taskId, pageOffset, pageRows, hasMore);
+    logTaskStage('cache_write_done', { taskId: task.taskId, pageOffset, hasMore });
     const nextPageToken = hasMore ? buildPageToken(task.taskId, pageOffset + batchSize) : '';
 
     console.log(`[cacheTask] taskId=${task.taskId}, pageOffset=${pageOffset}, pageSize=${Array.isArray(pageRows) ? pageRows.length : 0}, hasMore=${hasMore}`);
+    logTaskStage('return_fetched_page', {
+      taskId: task.taskId,
+      pageOffset,
+      pageSize: Array.isArray(pageRows) ? pageRows.length : 0,
+      hasMore,
+      nextOffset: hasMore ? pageOffset + batchSize : '',
+    });
     return generateTableRecords(pageRows, normalizedFields, hasMore, nextPageToken, pageOffset);
   } catch (error) {
+    logTaskStage('failed', { message: error.message });
     console.error('获取 MaxCompute 表记录失败:', error.message);
     throw error;
   }
