@@ -135,6 +135,77 @@ function parseLarkParams(body) {
 }
 
 /**
+ * 归一化数据源配置，兼容：
+ * 1. { maxcompute: {...} } / { sqlserver: {...} }
+ * 2. 扁平结构 { accessId, accessKey, ... } / { server, database, ... }
+ * 3. 带 dataSourceType 的扁平结构
+ */
+function normalizeDataSourceConfig(body) {
+    let config = body || {};
+
+    if (!config.maxcompute && !config.sqlserver) {
+        const parsedConfig = parseLarkParams(body);
+        if (parsedConfig) {
+            config = parsedConfig;
+        }
+    }
+
+    if (config.maxcompute || config.sqlserver) {
+        return config;
+    }
+
+    if (config.dataSourceType === "maxcompute") {
+        return {
+            maxcompute: config,
+            fields: config.fields,
+            offset: config.offset,
+            limit: config.limit,
+            pageToken: config.pageToken,
+            nextPageToken: config.nextPageToken,
+        };
+    }
+
+    if (config.dataSourceType === "sqlserver") {
+        return {
+            sqlserver: config,
+            fields: config.fields,
+            offset: config.offset,
+            limit: config.limit,
+            pageToken: config.pageToken,
+            nextPageToken: config.nextPageToken,
+        };
+    }
+
+    const looksLikeMaxCompute =
+        config.accessId && config.accessKey && config.endpoint && config.projectName;
+    if (looksLikeMaxCompute) {
+        return {
+            maxcompute: config,
+            fields: config.fields,
+            offset: config.offset,
+            limit: config.limit,
+            pageToken: config.pageToken,
+            nextPageToken: config.nextPageToken,
+        };
+    }
+
+    const looksLikeSqlServer =
+        config.server && config.database && config.user && config.password;
+    if (looksLikeSqlServer) {
+        return {
+            sqlserver: config,
+            fields: config.fields,
+            offset: config.offset,
+            limit: config.limit,
+            pageToken: config.pageToken,
+            nextPageToken: config.nextPageToken,
+        };
+    }
+
+    return null;
+}
+
+/**
  * 获取表元数据接口
  * 支持 MaxCompute 和 SQL Server
  */
@@ -142,15 +213,11 @@ app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
     try {
         let data;
 
-        // 首先检查是否有直接的数据源配置
-        let config = req.body;
-
-        // 如果没有，尝试解析飞书插件的参数
-        if (!config.sqlserver && !config.maxcompute) {
-            const parsedConfig = parseLarkParams(req.body);
-            if (parsedConfig) {
-                config = parsedConfig;
-            }
+        const config = normalizeDataSourceConfig(req.body);
+        if (!config) {
+            const err = new Error("Missing data source config: sqlserver or maxcompute");
+            err.statusCode = 400;
+            throw err;
         }
 
         // 判断数据源类型
@@ -189,15 +256,11 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
     try {
         let data;
 
-        // 首先检查是否有直接的数据源配置
-        let config = req.body;
-
-        // 如果没有，尝试解析飞书插件的参数
-        if (!config.sqlserver && !config.maxcompute) {
-            const parsedConfig = parseLarkParams(req.body);
-            if (parsedConfig) {
-                config = parsedConfig;
-            }
+        const config = normalizeDataSourceConfig(req.body);
+        if (!config) {
+            const err = new Error("Missing data source config: sqlserver or maxcompute");
+            err.statusCode = 400;
+            throw err;
         }
 
         // 获取分页参数（用于分批写入）
