@@ -117,11 +117,6 @@ function parseLarkParams(body) {
                     typeof params.datasourceConfig === "string"
                         ? JSON.parse(params.datasourceConfig)
                         : params.datasourceConfig;
-
-                console.log(
-                    "解析后的 datasourceConfig:",
-                    JSON.stringify(config).substring(0, 200),
-                );
                 
                 if (params.pageToken) {
                     config.pageToken = params.pageToken;
@@ -144,9 +139,6 @@ function parseLarkParams(body) {
  * 支持 MaxCompute 和 SQL Server
  */
 app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
-    console.log("========== table_meta 请求 ==========");
-    console.log("请求体 keys:", Object.keys(req.body));
-
     try {
         let data;
 
@@ -161,23 +153,12 @@ app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
             }
         }
 
-        console.log(
-            "最终使用的配置:",
-            JSON.stringify(config).substring(0, 300),
-        );
-
         // 判断数据源类型
         if (config.sqlserver) {
-            // SQL Server 数据源
-            console.log("→ 使用 SQL Server 数据源 (sqlserver_handler.js)");
             data = await getSqlServerTableMeta(config.sqlserver);
         } else if (config.maxcompute) {
-            // MaxCompute 数据源
-            console.log("→ 使用 MaxCompute 数据源 (table_meta.js)");
             data = await getTableMeta(config);
         } else {
-            // 没有明确的数据源，返回默认
-            console.log("→ 无数据源配置，返回默认");
             data = await getTableMeta(config);
         }
 
@@ -224,14 +205,17 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         let limit = parseInt(config.limit) || parseInt(config.maxcompute?.limit) || parseInt(config.sqlserver?.limit) || 1000;
         limit = Math.min(limit, 1000); // 最大 1000
         
+        console.log(`[参数解析] config.offset=${config.offset}, config.pageToken=${config.pageToken}, config.nextPageToken=${config.nextPageToken}`);
         console.log(`[limit解析] config.limit=${config.limit}, maxcompute.limit=${config.maxcompute?.limit}, 最终limit=${limit}`);
         
         // 如果有 pageToken 或 nextPageToken，则使用它作为 offset
         // 支持两种参数名以确保兼容性
         if (config.pageToken) {
             offset = parseInt(config.pageToken) || 0;
+            console.log(`[pageToken解析] 使用 pageToken=${config.pageToken}, offset=${offset}`);
         } else if (config.nextPageToken) {
             offset = parseInt(config.nextPageToken) || 0;
+            console.log(`[nextPageToken解析] 使用 nextPageToken=${config.nextPageToken}, offset=${offset}`);
         }
 
         // 判断数据源类型
@@ -294,18 +278,13 @@ app.get("/health", (req, res) => {
  * 前端配置页面调用，不需要签名验证
  */
 app.post("/api/test_connection", async (req, res) => {
-    console.log("test_connection 的请求数据", req.body);
-
     try {
-        // 正确处理请求数据格式
         const dataSourceConfig = {};
         dataSourceConfig[req.body.dataSourceType] = req.body;
         
-        // 创建数据源实例
         const dataSource = await DataSourceFactory.createDataSource(dataSourceConfig);
         const result = await dataSource.testConnection();
         
-        // 安全调用 close 方法
         if (dataSource.close && typeof dataSource.close === 'function') {
             await dataSource.close();
         }
@@ -332,13 +311,10 @@ app.post("/api/test_connection", async (req, res) => {
  * 前端配置页面调用，不需要签名验证
  */
 app.post("/api/test_sqlserver_connection", async (req, res) => {
-    console.log("test_sqlserver_connection 的请求数据", req.body);
-
     try {
         const dataSource = await DataSourceFactory.createDataSource({ sqlserver: req.body });
         const result = await dataSource.testConnection();
         
-        // 安全调用 close 方法
         if (dataSource.close && typeof dataSource.close === 'function') {
             await dataSource.close();
         }
@@ -364,8 +340,6 @@ app.post("/api/test_sqlserver_connection", async (req, res) => {
  * 前端配置页面调用，不需要签名验证
  */
 app.post("/api/tables", async (req, res) => {
-    console.log("tables 的请求数据", req.body);
-
     try {
         const dataSourceConfig = {};
         dataSourceConfig[req.body.dataSourceType] = req.body;
@@ -397,8 +371,6 @@ app.post("/api/tables", async (req, res) => {
  * 前端配置页面调用，不需要签名验证
  */
 app.post("/api/sqlserver_tables", async (req, res) => {
-    console.log("sqlserver_tables 的请求数据", req.body);
-
     try {
         const dataSource = await DataSourceFactory.createDataSource({ sqlserver: req.body });
         const tables = await dataSource.getTables();
@@ -424,8 +396,6 @@ app.post("/api/sqlserver_tables", async (req, res) => {
  * 前端配置页面调用，不需要签名验证
  */
 app.post("/api/maxcompute_tables", async (req, res) => {
-    console.log("maxcompute_tables 的请求数据", req.body);
-
     try {
         const dataSource = await DataSourceFactory.createDataSource({ maxcompute: req.body });
         const tables = await dataSource.getTables();

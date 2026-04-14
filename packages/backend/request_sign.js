@@ -22,17 +22,8 @@ function judgeEncryptSignValid(req) {
   const timestamp = headers["x-base-request-timestamp"] || headers["X-Base-Request-Timestamp"];
   const sig = headers["x-base-signature"] || headers["X-Base-Signature"];
 
-  console.log("收到请求的所有 header keys:", Object.keys(headers));
-  console.log("收到请求的header:");
-  console.log("x-base-request-timestamp:", timestamp);
-  console.log("  x-base-request-nonce:", nonce);
-  console.log("  x-base-signature:", sig);
-  console.log("  body:", body);
-  console.log("  body type:", typeof body);
-
   // 当没有设置秘钥时，默认跳过验证，以提供向后兼容性
   if (!secretKey) {
-    console.log("未设置请求签名秘钥，跳过签名验证");
     return true;
   }
 
@@ -55,7 +46,6 @@ function judgeEncryptSignValid(req) {
   
   // 拼接字符串（按照官方文档顺序：timestamp + nonce + secretKey + body）
   const str = timestamp + nonce + secretKey + bodyStr;
-  console.log("签名字符串:", str);
   
   // 创建SHA-1加密实例
   const sha1 = crypto.createHash("sha1");
@@ -66,7 +56,9 @@ function judgeEncryptSignValid(req) {
   // 比较加密结果
   const isValid = encryptedStr === sig;
   
-  console.log(`签名验证: ${isValid ? '通过' : '失败'}, 计算结果: ${encryptedStr}, 收到签名: ${sig}`);
+  if (!isValid) {
+    console.log(`签名验证失败: 计算结果: ${encryptedStr}, 收到签名: ${sig}`);
+  }
   
   return isValid;
 }
