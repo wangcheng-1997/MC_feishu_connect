@@ -205,6 +205,10 @@ if __name__ == '__main__':
 `;
 
 const PYODPS_SCRIPT_PATH = path.join(__dirname, 'pyodps_runner.py');
+const PYODPS_COMMAND_TIMEOUT_MS = Math.max(
+  parseInt(process.env.PYODPS_COMMAND_TIMEOUT_MS || '120000', 10) || 120000,
+  10000
+);
 
 if (!fs.existsSync(PYODPS_SCRIPT_PATH)) {
   fs.writeFileSync(PYODPS_SCRIPT_PATH, PYODPS_SCRIPT);
@@ -401,7 +405,7 @@ class PythonProcessManager {
           this.queue.splice(index, 1);
         }
         resolve({ success: false, message: '操作超时' });
-      }, 30000);
+      }, PYODPS_COMMAND_TIMEOUT_MS);
 
       try {
         await this._ensureProcess();
@@ -529,7 +533,7 @@ class PythonProcessManager {
         if (wasActive) {
           this._processQueue();
         }
-      }, 30000);
+      }, PYODPS_COMMAND_TIMEOUT_MS);
 
       this._processQueue();
     });
@@ -736,9 +740,10 @@ class MaxComputeClient {
 
   async executeSQL(sql, limit = null, offset = 0) {
     try {
-      let finalSQL = sql;
-      if (limit !== null) {
-        finalSQL = `${sql} LIMIT ${limit} OFFSET ${offset}`;
+      let finalSQL = String(sql || '').trim().replace(/;+\s*$/, '');
+      const hasLimitClause = /\blimit\s+\d+(\s+offset\s+\d+)?\s*$/i.test(finalSQL);
+      if (limit !== null && !hasLimitClause) {
+        finalSQL = `${finalSQL} LIMIT ${limit} OFFSET ${offset}`;
       }
       
       console.log(`[executeSQL] offset=${offset}, limit=${limit}, sql长度=${finalSQL.length}`);

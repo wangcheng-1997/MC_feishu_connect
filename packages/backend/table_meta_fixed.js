@@ -18,23 +18,13 @@ async function getTableMetaFromMaxCompute(config) {
 
     if (config.sql) {
       const inferredTableName = config.tableName || inferTableNameFromSql(config.sql);
-
-      if (inferredTableName) {
-        const tableMeta = await client.getTableMeta(inferredTableName);
-        columns = tableMeta.Table.Columns || [];
-        tableName = tableName || inferredTableName;
-      } else {
-        const data = await client.executeSQL(`SELECT * FROM (${config.sql}) t LIMIT 1`);
-        if (Array.isArray(data) && data.length > 0) {
-          const firstRow = data[0];
-          columns = Object.keys(firstRow).map((key) => ({
-            Name: key,
-            Type: 'STRING',
-            Comment: '',
-          }));
-        }
-        tableName = tableName || 'SQL Query Result';
+      if (!inferredTableName) {
+        throw new Error('Unable to infer table name from SQL. Please provide tableName explicitly.');
       }
+
+      const tableMeta = await client.getTableMeta(inferredTableName);
+      columns = tableMeta.Table.Columns || [];
+      tableName = tableName || inferredTableName;
     } else if (config.tableName) {
       const tableMeta = await client.getTableMeta(config.tableName);
       columns = tableMeta.Table.Columns || [];
@@ -61,4 +51,3 @@ async function getTableMeta(reqBody = {}) {
 }
 
 module.exports = { getTableMeta, getTableMetaFromMaxCompute };
-

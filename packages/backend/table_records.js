@@ -2,20 +2,11 @@ const { MaxComputeClient } = require('./maxcompute_client.js');
 const { generateTableRecords } = require('./maxcompute_adapter.js');
 const { getSqlServerTableRecords } = require('./sqlserver_handler.js');
 
-function ensureFields(fields, data) {
+function ensureFields(fields) {
   if (Array.isArray(fields) && fields.length > 0) {
     return fields;
   }
-  if (Array.isArray(data) && data.length > 0) {
-    return Object.keys(data[0]).map((key, index) => ({
-      fieldId: `fid_${index + 1}`,
-      fieldName: key,
-      fieldType: 1,
-      isPrimary: index === 0,
-      description: '',
-    }));
-  }
-  return [];
+  throw new Error('Missing field definitions for record conversion');
 }
 
 /**
@@ -39,6 +30,7 @@ function ensureFields(fields, data) {
 async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit = 1000) {
   try {
     const client = new MaxComputeClient(config);
+    const normalizedFields = ensureFields(fields);
     
     const batchSize = Math.min(limit, 1000);
     
@@ -54,7 +46,7 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
       const hasMore = data.length === batchSize;
       const nextPageToken = hasMore ? String(offset + batchSize) : '';
       
-      return generateTableRecords(data, ensureFields(fields, data), hasMore, nextPageToken, offset);
+      return generateTableRecords(data, normalizedFields, hasMore, nextPageToken, offset);
     } else {
       data = await client.getTableData(config.tableName, batchSize, offset);
       
@@ -63,7 +55,7 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
       const hasMore = data.length === batchSize;
       const nextPageToken = hasMore ? String(offset + batchSize) : '';
       
-      return generateTableRecords(data, ensureFields(fields, data), hasMore, nextPageToken, offset);
+      return generateTableRecords(data, normalizedFields, hasMore, nextPageToken, offset);
     }
   } catch (error) {
     console.error('获取 MaxCompute 表记录失败:', error);
@@ -128,13 +120,9 @@ async function getTableRecords(reqBody = {}) {
     // 如果没有提供字段定义，先获取表元数据
     let fields = reqBody.fields;
     if (!fields || fields.length === 0) {
-      try {
-        const { getTableMetaFromMaxCompute } = require('./table_meta_fixed.js');
-        const meta = await getTableMetaFromMaxCompute(reqBody.maxcompute);
-        fields = meta.fields;
-      } catch (metaError) {
-        console.warn('[getTableRecords] MaxCompute metadata failed, fallback to infer fields from row:', metaError.message);
-      }
+      const { getTableMetaFromMaxCompute } = require('./table_meta_fixed.js');
+      const meta = await getTableMetaFromMaxCompute(reqBody.maxcompute);
+      fields = meta.fields;
     }
 
     // 获取分页参数

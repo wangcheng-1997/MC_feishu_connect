@@ -4,6 +4,9 @@
 
 // MaxCompute 数据类型到飞书多维表格字段类型的映射
 const ODPS_TO_LARK_TYPE_MAP = {
+  'STRING': 1,
+  'TINYINT': 2,
+  'NUMERIC': 8,
   // 字符串类型
   'STRING': 1,      // 文本
   'VARCHAR': 1,     // 文本
@@ -138,16 +141,23 @@ function convertValueToLark(value, fieldType, odpsType) {
     
     case 2: // 数字
     case 8: // 货币
-      return Number(value);
+      {
+        const numericValue = Number(value);
+        return Number.isFinite(numericValue) ? numericValue : null;
+      }
     
     case 5: // 日期
       // MaxCompute 日期格式转换为时间戳（毫秒）
       if (typeof value === 'string') {
-        return new Date(value).getTime();
+        const timestamp = new Date(value).getTime();
+        return Number.isFinite(timestamp) ? timestamp : null;
       }
       return value;
     
     case 7: // 复选框
+      if (typeof value === 'string') {
+        return ['true', '1', 'yes', 'y'].includes(value.toLowerCase());
+      }
       return Boolean(value);
     
     case 10: // 超链接

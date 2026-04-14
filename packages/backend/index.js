@@ -124,6 +124,9 @@ function parseLarkParams(body) {
                 if (params.nextPageToken) {
                     config.nextPageToken = params.nextPageToken;
                 }
+                if (params.fields && !config.fields) {
+                    config.fields = params.fields;
+                }
                 
                 return config;
             }
@@ -148,6 +151,22 @@ function normalizeDataSourceConfig(body) {
         if (parsedConfig) {
             config = parsedConfig;
         }
+    }
+
+    if (body && body.fields && !config.fields) {
+        config.fields = body.fields;
+    }
+    if (body && body.offset !== undefined && config.offset === undefined) {
+        config.offset = body.offset;
+    }
+    if (body && body.limit !== undefined && config.limit === undefined) {
+        config.limit = body.limit;
+    }
+    if (body && body.pageToken !== undefined && config.pageToken === undefined) {
+        config.pageToken = body.pageToken;
+    }
+    if (body && body.nextPageToken !== undefined && config.nextPageToken === undefined) {
+        config.nextPageToken = body.nextPageToken;
     }
 
     if (config.maxcompute || config.sqlserver) {

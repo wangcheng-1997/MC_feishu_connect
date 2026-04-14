@@ -147,3 +147,6 @@ async function getTableMeta(reqBody = {}) {
 }
 
 module.exports = { getTableMeta, getTableMetaFromMaxCompute, getDefaultTableMeta };
+
+// Keep compatibility for old imports, but route runtime logic to the fixed implementation.
+module.exports = require('./table_meta_fixed.js');
