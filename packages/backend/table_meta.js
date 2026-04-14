@@ -27,7 +27,7 @@ async function getTableMetaFromMaxCompute(config) {
     // 如果提供了自定义 SQL，执行 SQL 获取结果结构
     if (config.sql) {
       // 执行 SQL 获取前 1 条记录，用于推断字段结构
-      const data = await client.executeSQL(`SELECT * FROM (${config.sql}) t LIMIT 1`, 1, 0);
+      const data = await client.executeSQL(`SELECT * FROM (${config.sql}) t LIMIT 1`);
       
       if (data && data.length > 0) {
         // 从第一条记录的键获取列名
