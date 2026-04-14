@@ -206,7 +206,7 @@ class SqlServerClient {
       }));
     } catch (error) {
       console.error('获取 SQL Server 表列表失败:', error);
-      return [];
+      throw error;
     }
   }
 

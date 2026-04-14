@@ -8,7 +8,7 @@ connection_pool = {}
 
 def get_connection(endpoint, project_name, access_id, access_key):
     try:
-        key = f"{endpoint}:{project_name}:{access_id}"
+        key = f"{endpoint}:{project_name}:{access_id}:{access_key}"
         if key in connection_pool:
             return connection_pool[key]
         
@@ -42,7 +42,7 @@ def get_tables(endpoint, project_name, access_id, access_key):
         tables = list(odps.list_tables())
         return {'success': True, 'data': [{'name': t.name, 'schema': 'default'} for t in tables]}
     except Exception as e:
-        return {'success': True, 'data': []}
+        return {'success': False, 'message': str(e)}
 
 def get_table_meta(endpoint, project_name, access_id, access_key, table_name):
     try:
@@ -109,6 +109,7 @@ def get_table_data(endpoint, project_name, access_id, access_key, table_name, li
         return {'success': False, 'message': str(e)}
 
 def handle_command(command):
+    request_id = command.get('request_id')
     try:
         action = command.get('action')
         endpoint = command.get('endpoint')
@@ -133,9 +134,14 @@ def handle_command(command):
         else:
             result = {'success': False, 'message': f'未知操作: {action}'}
         
+        if request_id is not None:
+            result['request_id'] = request_id
         return result
     except Exception as e:
-        return {'success': False, 'message': str(e)}
+        result = {'success': False, 'message': str(e)}
+        if request_id is not None:
+            result['request_id'] = request_id
+        return result
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

@@ -131,7 +131,7 @@ async function getSqlServerTableMeta(config) {
   } catch (error) {
     console.error('获取 SQL Server 表元数据失败:', error);
     // 返回默认元数据作为 fallback
-    return getDefaultTableMeta();
+    throw error;
   } finally {
     await client.close();
   }
@@ -192,7 +192,7 @@ async function getSqlServerTableRecords(config, fields, offset, limit) {
   } catch (error) {
     console.error('获取 SQL Server 表记录失败:', error);
     // 返回默认数据作为 fallback
-    return getDefaultTableRecords();
+    throw error;
   } finally {
     await client.close();
   }

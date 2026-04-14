@@ -12,7 +12,7 @@ connection_pool = {}
 
 def get_connection(endpoint, project_name, access_id, access_key):
     try:
-        key = f"{endpoint}:{project_name}:{access_id}"
+        key = f"{endpoint}:{project_name}:{access_id}:{access_key}"
         if key in connection_pool:
             return connection_pool[key]
         
@@ -46,7 +46,7 @@ def get_tables(endpoint, project_name, access_id, access_key):
         tables = list(odps.list_tables())
         return {'success': True, 'data': [{'name': t.name, 'schema': 'default'} for t in tables]}
     except Exception as e:
-        return {'success': True, 'data': []}
+        return {'success': False, 'message': str(e)}
 
 def get_table_meta(endpoint, project_name, access_id, access_key, table_name):
     try:
@@ -113,6 +113,7 @@ def get_table_data(endpoint, project_name, access_id, access_key, table_name, li
         return {'success': False, 'message': str(e)}
 
 def handle_command(command):
+    request_id = command.get('request_id')
     try:
         action = command.get('action')
         endpoint = command.get('endpoint')
@@ -137,9 +138,14 @@ def handle_command(command):
         else:
             result = {'success': False, 'message': f'未知操作: {action}'}
         
+        if request_id is not None:
+            result['request_id'] = request_id
         return result
     except Exception as e:
-        return {'success': False, 'message': str(e)}
+        result = {'success': False, 'message': str(e)}
+        if request_id is not None:
+            result['request_id'] = request_id
+        return result
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -210,6 +216,8 @@ class PythonProcessManager {
     this.process = null;
     this.queue = [];
     this.isProcessing = false;
+    this.activeTask = null;
+    this.nextRequestId = 1;
     this.pythonCommand = this._detectPythonCommand();
   }
 
@@ -288,6 +296,16 @@ class PythonProcessManager {
     this.process.on('close', (code) => {
       console.log('Python 进程关闭，退出码:', code);
       this.process = null;
+      if (this.activeTask) {
+        const task = this.activeTask;
+        this.activeTask = null;
+        this.isProcessing = false;
+        const index = this.queue.indexOf(task);
+        if (index > -1) {
+          this.queue.splice(index, 1);
+        }
+        task.resolve({ success: false, message: 'Python process closed unexpectedly' });
+      }
       this._processQueue();
     });
   }
@@ -323,7 +341,12 @@ class PythonProcessManager {
 
     this.isProcessing = true;
     const task = this.queue[0];
-    this._sendCommand(task.command);
+    this.activeTask = task;
+    task.sent = true;
+    this._sendCommand({
+      ...task.command,
+      request_id: task.requestId,
+    });
   }
 
   _sendCommand(command) {
@@ -352,11 +375,17 @@ class PythonProcessManager {
   }
 
   async runCommand(command) {
-    return new Promise(async (resolve, reject) => {
+    return new Promise(async (resolve) => {
       // 创建任务
       const task = {
+        requestId: this.nextRequestId++,
         command,
+        settled: false,
         resolve: (result) => {
+          if (task.settled) {
+            return;
+          }
+          task.settled = true;
           clearTimeout(timeoutId);
           resolve(result);
         }
@@ -387,6 +416,122 @@ class PythonProcessManager {
         clearTimeout(timeoutId);
         resolve({ success: false, message: error.message });
       }
+    });
+  }
+
+  _removeTask(task) {
+    const index = this.queue.indexOf(task);
+    if (index > -1) {
+      this.queue.splice(index, 1);
+    }
+  }
+
+  _sendCommand(command) {
+    if (!this.process) {
+      throw new Error('Python process is not running');
+    }
+
+    try {
+      this.process.stdin.write(JSON.stringify(command) + '\n');
+    } catch (error) {
+      this.process = null;
+      throw new Error('Failed to send command to Python process');
+    }
+  }
+
+  _handleResponse(response) {
+    let result;
+
+    try {
+      result = JSON.parse(response);
+    } catch (error) {
+      console.error('JSON parse error:', response);
+      if (this.activeTask) {
+        const task = this.activeTask;
+        this.activeTask = null;
+        this.isProcessing = false;
+        this._removeTask(task);
+        task.resolve({ success: false, message: `Invalid Python output: ${response}` });
+      }
+      this._processQueue();
+      return;
+    }
+
+    if (!this.activeTask) {
+      return;
+    }
+
+    const responseId = result.request_id;
+    if (responseId !== undefined && String(responseId) !== String(this.activeTask.requestId)) {
+      return;
+    }
+
+    const task = this.activeTask;
+    this.activeTask = null;
+    this.isProcessing = false;
+    this._removeTask(task);
+    delete result.request_id;
+    task.resolve(result);
+    this._processQueue();
+  }
+
+  _processQueue() {
+    if (this.isProcessing || this.queue.length === 0) return;
+
+    const task = this.queue[0];
+    this.activeTask = task;
+    this.isProcessing = true;
+    task.sent = true;
+
+    this._ensureProcess()
+      .then(() => {
+        this._sendCommand({
+          ...task.command,
+          request_id: task.requestId,
+        });
+      })
+      .catch((error) => {
+        this.activeTask = null;
+        this.isProcessing = false;
+        this._removeTask(task);
+        task.resolve({ success: false, message: error.message });
+        this._processQueue();
+      });
+  }
+
+  async runCommand(command) {
+    return new Promise((resolve) => {
+      let timeoutId;
+      const task = {
+        requestId: this.nextRequestId++,
+        command,
+        settled: false,
+        resolve: (result) => {
+          if (task.settled) {
+            return;
+          }
+          task.settled = true;
+          clearTimeout(timeoutId);
+          resolve(result);
+        },
+      };
+
+      this.queue.push(task);
+
+      timeoutId = setTimeout(() => {
+        const wasActive = this.activeTask === task;
+        this._removeTask(task);
+        if (wasActive) {
+          this.activeTask = null;
+          this.isProcessing = false;
+        }
+        task.resolve({ success: false, message: 'Operation timed out' });
+        if (wasActive) {
+          this._processQueue();
+        }
+      }, 30000);
+
+      this._processQueue();
     });
   }
 
@@ -515,12 +660,12 @@ class MaxComputeClient {
       } else {
         let errorMessage = result.message || '获取表列表失败';
         console.error('获取表列表失败:', errorMessage);
-        return [];
+        throw new Error(errorMessage);
       }
     } catch (error) {
       let errorMessage = error.message || '获取表列表失败';
       console.error('获取表列表失败:', errorMessage);
-      return [];
+      throw error;
     }
   }
 

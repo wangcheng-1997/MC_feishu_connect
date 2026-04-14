@@ -1,5 +1,6 @@
 const { MaxComputeClient } = require('./maxcompute_client.js');
-const { generateTableRecords, generateTableMeta } = require('./maxcompute_adapter.js');
+const { generateTableRecords } = require('./maxcompute_adapter.js');
+const { getSqlServerTableRecords } = require('./sqlserver_handler.js');
 
 /**
  * 从 MaxCompute 获取表记录数据
@@ -50,7 +51,7 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
     }
   } catch (error) {
     console.error('获取 MaxCompute 表记录失败:', error);
-    return getDefaultTableRecords();
+    throw error;
   }
 }
 
@@ -141,7 +142,7 @@ async function getTableRecords(reqBody = {}) {
   }
   
   // 否则返回默认数据
-  return getDefaultTableRecords();
+  throw new Error('Missing data source config: maxcompute or sqlserver');
 }
 
 module.exports = { 

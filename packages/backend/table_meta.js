@@ -26,8 +26,8 @@ async function getTableMetaFromMaxCompute(config) {
     
     // 如果提供了自定义 SQL，执行 SQL 获取结果结构
     if (config.sql) {
-      // 执行 SQL 获取前 0 条记录，只获取结构
-      const data = await client.executeSQL(`SELECT * FROM (${config.sql}) t LIMIT 0`);
+      // 执行 SQL 获取前 1 条记录，用于推断字段结构
+      const data = await client.executeSQL(`SELECT * FROM (${config.sql}) t LIMIT 1`, 1, 0);
       
       if (data && data.length > 0) {
         // 从第一条记录的键获取列名
@@ -39,7 +39,7 @@ async function getTableMetaFromMaxCompute(config) {
         }));
       } else {
         // 如果没有数据，尝试解析 SQL 中的表名
-        const tableMatch = config.sql.match(/FROM\s+([a-zA-Z0-9_]+)/i);
+        const tableMatch = config.sql.match(/FROM\s+[`"]?([a-zA-Z0-9_.]+)[`"]?/i);
         if (tableMatch && tableMatch[1]) {
           const tableMeta = await client.getTableMeta(tableMatch[1]);
           columns = tableMeta.Table.Columns || [];
@@ -54,6 +54,9 @@ async function getTableMetaFromMaxCompute(config) {
     }
     
     // 转换为飞书多维表格格式
+    if (!columns || columns.length === 0) {
+      throw new Error('Unable to infer columns from MaxCompute SQL/table metadata');
+    }
     return generateTableMeta(
       tableName,
       columns,
@@ -62,7 +65,7 @@ async function getTableMetaFromMaxCompute(config) {
   } catch (error) {
     console.error('获取 MaxCompute 表元数据失败:', error);
     // 返回默认元数据作为 fallback
-    return getDefaultTableMeta();
+    throw error;
   }
 }
 
@@ -132,7 +135,7 @@ async function getTableMeta(reqBody = {}) {
   }
   
   // 否则返回默认元数据
-  return getDefaultTableMeta();
+  throw new Error('Missing maxcompute config');
 }
 
 module.exports = { getTableMeta, getTableMetaFromMaxCompute, getDefaultTableMeta };

@@ -159,7 +159,9 @@ app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
         } else if (config.maxcompute) {
             data = await getTableMeta(config);
         } else {
-            data = await getTableMeta(config);
+            const err = new Error("Missing data source config: sqlserver or maxcompute");
+            err.statusCode = 400;
+            throw err;
         }
 
         const result = {
@@ -170,7 +172,7 @@ app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
         res.status(200).json(result);
     } catch (error) {
         console.error("获取表元数据失败:", error);
-        res.status(500).json({
+        res.status(error.statusCode || 500).json({
             code: 500,
             message: "获取表元数据失败: " + error.message,
             data: null,
@@ -228,7 +230,7 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
                 offset,
                 limit
             );
-        } else {
+        } else if (config.maxcompute) {
             // MaxCompute 数据源（默认）
             // 构建配置，确保分页参数正确传递
             const configWithPaging = {
@@ -239,6 +241,10 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
             };
             console.log(`[分页参数] offset=${offset}, limit=${limit}, sql=${config.maxcompute?.sql?.substring(0, 50)}`);
             data = await getTableRecords(configWithPaging);
+        } else {
+            const err = new Error("Missing data source config: sqlserver or maxcompute");
+            err.statusCode = 400;
+            throw err;
         }
 
         const result = {
@@ -249,7 +255,7 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         res.status(200).json(result);
     } catch (error) {
         console.error("获取记录数据失败:", error);
-        res.status(500).json({
+        res.status(error.statusCode || 500).json({
             code: 500,
             message: "获取记录数据失败: " + error.message,
             data: null,
