@@ -384,10 +384,10 @@ app.post("/api/tables", async (req, res) => {
         });
     } catch (error) {
         console.error("获取表列表失败:", error);
-        res.status(200).json({
-            code: 0,
-            message: "获取表列表成功",
-            data: [],
+        res.status(500).json({
+            code: 500,
+            message: "获取表列表失败: " + error.message,
+            data: null,
         });
     }
 });
