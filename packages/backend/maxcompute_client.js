@@ -252,8 +252,9 @@ class PythonProcessManager {
       });
 
       proc.stderr.on('data', (data) => {
-        stderr += data.toString();
-        console.error('Python 错误:', data.toString());
+        const chunk = data.toString();
+        stderr += chunk;
+        console.error(`Python 错误输出，长度=${chunk.length}`);
       });
 
       proc.on('close', (code) => {
@@ -294,7 +295,8 @@ class PythonProcessManager {
     });
 
     this.process.stderr.on('data', (data) => {
-      console.error('Python 错误输出:', data.toString());
+      const chunk = data.toString();
+      console.error(`Python 错误输出，长度=${chunk.length}`);
     });
 
     this.process.on('close', (code) => {
@@ -324,10 +326,10 @@ class PythonProcessManager {
       this.isProcessing = false;
       this._processQueue();
     } catch (e) {
-      console.error('JSON 解析错误:', response);
+      console.error(`JSON 解析错误，长度=${String(response || '').length}`);
       const task = this.queue.shift();
       if (task) {
-        task.resolve({ success: false, message: `无法解析输出: ${response}` });
+        task.resolve({ success: false, message: '无法解析 Python 输出' });
       }
       this.isProcessing = false;
       this._processQueue();
@@ -449,13 +451,13 @@ class PythonProcessManager {
     try {
       result = JSON.parse(response);
     } catch (error) {
-      console.error('JSON parse error:', response);
+      console.error(`JSON parse error, length=${String(response || '').length}`);
       if (this.activeTask) {
         const task = this.activeTask;
         this.activeTask = null;
         this.isProcessing = false;
         this._removeTask(task);
-        task.resolve({ success: false, message: `Invalid Python output: ${response}` });
+        task.resolve({ success: false, message: 'Invalid Python output' });
       }
       this._processQueue();
       return;
