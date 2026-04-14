@@ -6,7 +6,6 @@ const PYODPS_SCRIPT = `
 import sys
 import json
 import argparse
-import traceback
 import datetime
 
 connection_pool = {}
@@ -15,12 +14,9 @@ def get_connection(endpoint, project_name, access_id, access_key):
     try:
         key = f"{endpoint}:{project_name}:{access_id}"
         if key in connection_pool:
-            print("从连接池获取连接", file=sys.stderr)
             return connection_pool[key]
         
-        print("正在导入 PyODPS...", file=sys.stderr)
         from odps import ODPS
-        print("PyODPS 导入成功", file=sys.stderr)
         
         odps = ODPS(
             access_id=access_id,
@@ -28,17 +24,13 @@ def get_connection(endpoint, project_name, access_id, access_key):
             project=project_name,
             endpoint=endpoint
         )
-        print("ODPS 实例创建成功", file=sys.stderr)
         
         connection_pool[key] = odps
         return odps
     except ImportError as e:
-        print(f"PyODPS 导入失败: {str(e)}", file=sys.stderr)
-        print("请安装 PyODPS: pip install pyodps", file=sys.stderr)
-        raise
+        raise Exception(f"PyODPS 导入失败: {str(e)}，请安装: pip install pyodps")
     except Exception as e:
-        print(f"创建连接失败: {str(e)}", file=sys.stderr)
-        raise
+        raise Exception(f"创建连接失败: {str(e)}")
 
 def test_connection(endpoint, project_name, access_id, access_key):
     try:
@@ -50,16 +42,10 @@ def test_connection(endpoint, project_name, access_id, access_key):
 
 def get_tables(endpoint, project_name, access_id, access_key):
     try:
-        print(f"尝试连接到: {endpoint}, 项目: {project_name}", file=sys.stderr)
         odps = get_connection(endpoint, project_name, access_id, access_key)
-        print("连接成功，正在获取表列表...", file=sys.stderr)
         tables = list(odps.list_tables())
-        print(f"找到 {len(tables)} 个表", file=sys.stderr)
         return {'success': True, 'data': [{'name': t.name, 'schema': 'default'} for t in tables]}
     except Exception as e:
-        print(f"获取表列表失败: {str(e)}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
         return {'success': True, 'data': []}
 
 def get_table_meta(endpoint, project_name, access_id, access_key, table_name):
@@ -124,8 +110,6 @@ def get_table_data(endpoint, project_name, access_id, access_key, table_name, li
             sql = f"SELECT * FROM {table_name} LIMIT {limit} OFFSET {offset}"
         return execute_sql(endpoint, project_name, access_id, access_key, sql, limit)
     except Exception as e:
-        import traceback
-        traceback.print_exc(file=sys.stderr)
         return {'success': False, 'message': str(e)}
 
 def handle_command(command):
@@ -155,8 +139,6 @@ def handle_command(command):
         
         return result
     except Exception as e:
-        import traceback
-        traceback.print_exc(file=sys.stderr)
         return {'success': False, 'message': str(e)}
 
 if __name__ == '__main__':
@@ -176,7 +158,6 @@ if __name__ == '__main__':
     
     if args.daemon:
         print('DAEMON_READY', flush=True)
-        print('进入守护进程模式', file=sys.stderr)
         
         while True:
             try:
@@ -194,8 +175,6 @@ if __name__ == '__main__':
             except json.JSONDecodeError:
                 print(json.dumps({'success': False, 'message': '无效的 JSON 命令'}), flush=True)
             except Exception as e:
-                import traceback
-                traceback.print_exc(file=sys.stderr)
                 print(json.dumps({'success': False, 'message': str(e)}), flush=True)
     else:
         try:
