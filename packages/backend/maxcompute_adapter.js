@@ -75,9 +75,8 @@ function getFieldProperty(odpsType, odpsColumn) {
     case 'DECIMAL':
       // 提取精度信息
       const match = odpsType.match(/\((\d+),\s*(\d+)\)/);
-      const scale = match ? parseInt(match[2]) : 2;
       return {
-        formatter: `#,##0.${'0'.repeat(scale)}`,
+        formatter: `#,##0.00`,
         currencyCode: 'CNY',
       };
     
