@@ -26,6 +26,13 @@ async function getTableMetaFromMaxCompute(config) {
     
     // 如果提供了自定义 SQL，执行 SQL 获取结果结构
     if (config.sql) {
+      const tableMatch = config.sql.match(/FROM\s+[`"]?([a-zA-Z0-9_.]+)[`"]?/i);
+      const inferredTableName = config.tableName || (tableMatch && tableMatch[1]);
+      if (inferredTableName) {
+        const tableMeta = await client.getTableMeta(inferredTableName);
+        columns = tableMeta.Table.Columns || [];
+        tableName = tableName || inferredTableName;
+      } else {
       // 执行 SQL 获取前 1 条记录，用于推断字段结构
       const data = await client.executeSQL(`SELECT * FROM (${config.sql}) t LIMIT 1`);
       
@@ -47,6 +54,7 @@ async function getTableMetaFromMaxCompute(config) {
       }
       
       tableName = tableName || 'SQL 查询结果';
+      }
     } else if (config.tableName) {
       // 否则获取指定表的元数据
       const tableMeta = await client.getTableMeta(config.tableName);

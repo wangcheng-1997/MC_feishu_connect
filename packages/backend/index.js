@@ -4,7 +4,7 @@ const fs = require("fs");
 
 const DataSourceFactory = require("./data_source_factory.js");
 const { judgeEncryptSignValid, setSecretKey } = require("./request_sign.js");
-const { getTableMeta } = require("./table_meta.js");
+const { getTableMeta } = require("./table_meta_fixed.js");
 const { getTableRecords } = require("./table_records.js");
 const {
     getSqlServerTableMeta,

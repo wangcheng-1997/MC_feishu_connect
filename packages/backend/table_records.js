@@ -2,6 +2,22 @@ const { MaxComputeClient } = require('./maxcompute_client.js');
 const { generateTableRecords } = require('./maxcompute_adapter.js');
 const { getSqlServerTableRecords } = require('./sqlserver_handler.js');
 
+function ensureFields(fields, data) {
+  if (Array.isArray(fields) && fields.length > 0) {
+    return fields;
+  }
+  if (Array.isArray(data) && data.length > 0) {
+    return Object.keys(data[0]).map((key, index) => ({
+      fieldId: `fid_${index + 1}`,
+      fieldName: key,
+      fieldType: 1,
+      isPrimary: index === 0,
+      description: '',
+    }));
+  }
+  return [];
+}
+
 /**
  * 从 MaxCompute 获取表记录数据
  * 
@@ -38,7 +54,7 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
       const hasMore = data.length === batchSize;
       const nextPageToken = hasMore ? String(offset + batchSize) : '';
       
-      return generateTableRecords(data, fields, hasMore, nextPageToken, offset);
+      return generateTableRecords(data, ensureFields(fields, data), hasMore, nextPageToken, offset);
     } else {
       data = await client.getTableData(config.tableName, batchSize, offset);
       
@@ -47,7 +63,7 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
       const hasMore = data.length === batchSize;
       const nextPageToken = hasMore ? String(offset + batchSize) : '';
       
-      return generateTableRecords(data, fields, hasMore, nextPageToken, offset);
+      return generateTableRecords(data, ensureFields(fields, data), hasMore, nextPageToken, offset);
     }
   } catch (error) {
     console.error('获取 MaxCompute 表记录失败:', error);
@@ -111,11 +127,6 @@ async function getTableRecords(reqBody = {}) {
   if (reqBody && reqBody.maxcompute) {
     // 如果没有提供字段定义，先获取表元数据
     let fields = reqBody.fields;
-    if (!fields) {
-      const { getTableMetaFromMaxCompute } = require('./table_meta.js');
-      const meta = await getTableMetaFromMaxCompute(reqBody.maxcompute);
-      fields = meta.fields;
-    }
     
     // 获取分页参数
     const offset = parseInt(reqBody.offset) || 0;
