@@ -73,7 +73,7 @@ class SqlServerClient {
       console.log(`[executeQuery完成] 返回${data.length}条数据`);
       return data;
     } catch (error) {
-      console.error('SQL Server 查询执行失败:', error);
+      console.error('SQL Server 查询执行失败:', error.message);
       throw error;
     }
   }
@@ -130,7 +130,7 @@ class SqlServerClient {
 
       return result;
     } catch (error) {
-      console.error('获取 SQL Server 表元数据失败:', error);
+      console.error('获取 SQL Server 表元数据失败:', error.message);
       throw error;
     }
   }
@@ -179,7 +179,7 @@ class SqlServerClient {
       console.log(`[getTableData完成] 返回${data.length}条数据`);
       return data;
     } catch (error) {
-      console.error('获取 SQL Server 表数据失败:', error);
+      console.error('获取 SQL Server 表数据失败:', error.message);
       throw error;
     }
   }
@@ -205,7 +205,7 @@ class SqlServerClient {
         schema: table.tableSchema || 'dbo'
       }));
     } catch (error) {
-      console.error('获取 SQL Server 表列表失败:', error);
+      console.error('获取 SQL Server 表列表失败:', error.message);
       throw error;
     }
   }

@@ -132,7 +132,7 @@ function parseLarkParams(body) {
             }
         }
     } catch (error) {
-        console.error("解析参数失败:", error);
+        console.error("解析参数失败:", error.message);
     }
     return null;
 }
@@ -257,7 +257,7 @@ app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
         };
         res.status(200).json(result);
     } catch (error) {
-        console.error("获取表元数据失败:", error);
+        console.error("获取表元数据失败:", error.message);
         res.status(error.statusCode || 500).json({
             code: 500,
             message: "获取表元数据失败: " + error.message,
@@ -289,23 +289,23 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         let limit = parseInt(config.limit) || parseInt(config.maxcompute?.limit) || parseInt(config.sqlserver?.limit) || 1000;
         limit = Math.min(limit, 1000); // 最大 1000
         
-        console.log(`[参数解析] config.offset=${config.offset}, config.pageToken=${config.pageToken}, config.nextPageToken=${config.nextPageToken}`);
-        console.log(`[limit解析] config.limit=${config.limit}, maxcompute.limit=${config.maxcompute?.limit}, 最终limit=${limit}`);
+        // Keep runtime logs concise; avoid printing request details.
+        console.log(`[分页请求] offset=${config.offset}, pageToken=${config.pageToken || ''}, nextPageToken=${config.nextPageToken || ''}, limit=${limit}`);
         
         // 如果有 pageToken 或 nextPageToken，则使用它作为 offset
         // 支持两种参数名以确保兼容性
         if (config.pageToken) {
             offset = parseInt(config.pageToken) || 0;
-            console.log(`[pageToken解析] 使用 pageToken=${config.pageToken}, offset=${offset}`);
+            console.log(`[分页游标] 使用 pageToken, offset=${offset}`);
         } else if (config.nextPageToken) {
             offset = parseInt(config.nextPageToken) || 0;
-            console.log(`[nextPageToken解析] 使用 nextPageToken=${config.nextPageToken}, offset=${offset}`);
+            console.log(`[分页游标] 使用 nextPageToken, offset=${offset}`);
         }
 
         // 判断数据源类型
         if (config.sqlserver) {
             // SQL Server 数据源
-            console.log(`[分页参数] offset=${offset}, limit=${limit}`);
+            console.log(`[分页执行] source=sqlserver, offset=${offset}, limit=${limit}`);
             data = await getSqlServerTableRecords(
                 config.sqlserver,
                 config.fields,
@@ -321,7 +321,7 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
                 offset: offset,
                 limit: limit
             };
-            console.log(`[分页参数] offset=${offset}, limit=${limit}, sql=${config.maxcompute?.sql?.substring(0, 50)}`);
+            console.log(`[分页执行] source=maxcompute, offset=${offset}, limit=${limit}`);
             data = await getTableRecords(configWithPaging);
         } else {
             const err = new Error("Missing data source config: sqlserver or maxcompute");
@@ -336,7 +336,7 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         };
         res.status(200).json(result);
     } catch (error) {
-        console.error("获取记录数据失败:", error);
+        console.error("获取记录数据失败:", error.message);
         res.status(error.statusCode || 500).json({
             code: 500,
             message: "获取记录数据失败: " + error.message,
@@ -383,7 +383,7 @@ app.post("/api/test_connection", async (req, res) => {
             data: result,
         });
     } catch (error) {
-        console.error("连接测试失败:", error);
+        console.error("连接测试失败:", error.message);
         res.status(500).json({
             code: 500,
             message: "连接测试失败: " + error.message,
@@ -413,7 +413,7 @@ app.post("/api/test_sqlserver_connection", async (req, res) => {
             data: result,
         });
     } catch (error) {
-        console.error("SQL Server 连接测试失败:", error);
+        console.error("SQL Server 连接测试失败:", error.message);
         res.status(500).json({
             code: 500,
             message: "连接测试失败: " + error.message,
@@ -445,7 +445,7 @@ app.post("/api/tables", async (req, res) => {
             data: tables,
         });
     } catch (error) {
-        console.error("获取表列表失败:", error);
+        console.error("获取表列表失败:", error.message);
         res.status(500).json({
             code: 500,
             message: "获取表列表失败: " + error.message,
@@ -470,7 +470,7 @@ app.post("/api/sqlserver_tables", async (req, res) => {
             data: tables,
         });
     } catch (error) {
-        console.error("获取 SQL Server 表列表失败:", error);
+        console.error("获取 SQL Server 表列表失败:", error.message);
         res.status(500).json({
             code: 500,
             message: "获取表列表失败: " + error.message,
@@ -495,7 +495,7 @@ app.post("/api/maxcompute_tables", async (req, res) => {
             data: tables,
         });
     } catch (error) {
-        console.error("获取 MaxCompute 表列表失败:", error);
+        console.error("获取 MaxCompute 表列表失败:", error.message);
         res.status(500).json({
             code: 500,
             message: "获取表列表失败: " + error.message,

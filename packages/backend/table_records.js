@@ -58,7 +58,7 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
       return generateTableRecords(data, normalizedFields, hasMore, nextPageToken, offset);
     }
   } catch (error) {
-    console.error('获取 MaxCompute 表记录失败:', error);
+    console.error('获取 MaxCompute 表记录失败:', error.message);
     throw error;
   }
 }
