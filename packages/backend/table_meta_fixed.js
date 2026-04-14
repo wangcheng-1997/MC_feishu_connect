@@ -1,4 +1,4 @@
-const { MaxComputeClient } = require('./maxcompute_client.js');
+const { MaxComputeClient } = require('./maxcompute_client_fixed.js');
 const { generateTableMeta } = require('./maxcompute_adapter.js');
 
 function inferTableNameFromSql(sql) {

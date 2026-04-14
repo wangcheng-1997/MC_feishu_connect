@@ -24,7 +24,7 @@ class DataSourceFactory {
    * @returns {Promise<DataSourceInterface>}
    */
   static async createMaxComputeDataSource(config) {
-    const { MaxComputeClient, getEndpoint } = require('./maxcompute_client.js');
+    const { MaxComputeClient, getEndpoint } = require('./maxcompute_client_fixed.js');
     
     // 生产环境不打印配置信息
     // console.log("原始配置:", JSON.stringify(config, null, 2));

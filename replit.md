@@ -29,7 +29,7 @@ Backend listens on port **5000** (or `$PORT`).
 - `packages/backend/maxcompute_adapter.js` — MaxCompute data source adapter
 - `packages/backend/sqlserver_adapter.js` — SQL Server data source adapter
 - `packages/backend/sqlserver_handler.js` — SQL Server request handler
-- `packages/backend/table_meta.js` — Table metadata retrieval
+- `packages/backend/table_meta_fixed.js` — Table metadata retrieval
 - `packages/backend/table_records.js` — Table records retrieval
 - `packages/backend/request_sign.js` — Signature verification
 - `packages/frontend/src/App.tsx` — Main configuration UI

@@ -1,4 +1,4 @@
-const { MaxComputeClient } = require('./maxcompute_client.js');
+const { MaxComputeClient } = require('./maxcompute_client_fixed.js');
 const { generateTableRecords } = require('./maxcompute_adapter.js');
 const { getSqlServerTableRecords } = require('./sqlserver_handler.js');
 

@@ -120,7 +120,7 @@ MaxCompute Endpoint 是访问 MaxCompute 服务的接入点。根据官方文档
 ### 使用方式
 
 ```javascript
-const { MaxComputeClient, getEndpoint } = require('./maxcompute_client.js');
+const { MaxComputeClient, getEndpoint } = require('./maxcompute_client_fixed.js');
 
 // 方式一：直接指定 Endpoint
 const client = new MaxComputeClient({
