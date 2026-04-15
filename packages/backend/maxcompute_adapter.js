@@ -6,7 +6,7 @@
 const ODPS_TO_LARK_TYPE_MAP = {
   'STRING': 1,
   'TINYINT': 2,
-  'NUMERIC': 8,
+  'NUMERIC': 2,
   // 字符串类型
   'STRING': 1,      // 文本
   'VARCHAR': 1,     // 文本
@@ -20,7 +20,7 @@ const ODPS_TO_LARK_TYPE_MAP = {
   'BIGINT': 2,      // 数字
   'FLOAT': 2,       // 数字
   'DOUBLE': 2,      // 数字
-  'DECIMAL': 8,     // 货币
+  'DECIMAL': 2,     // 数字（小数）
   
   // 日期时间类型
   'DATE': 5,        // 日期
@@ -80,7 +80,6 @@ function getFieldProperty(odpsType, odpsColumn) {
       const match = odpsType.match(/\((\d+),\s*(\d+)\)/);
       return {
         formatter: `#,##0.00`,
-        currencyCode: 'CNY',
       };
     
     case 'DOUBLE':
