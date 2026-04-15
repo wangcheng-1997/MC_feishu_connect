@@ -51,7 +51,7 @@ function buildQuerySignature(config = {}) {
   return crypto.createHash('sha1').update(JSON.stringify(base)).digest('hex');
 }
 
-async function createTask(querySignature = '') {
+async function createTask(querySignature = '', dataRows = null) {
   const taskId = (crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex')).replace(/-/g, '');
   const now = Date.now();
   const payload = {
@@ -59,6 +59,8 @@ async function createTask(querySignature = '') {
     createdAt: now,
     expiresAt: nextExpiry(),
     querySignature,
+    total: Array.isArray(dataRows) ? dataRows.length : 0,
+    rows: Array.isArray(dataRows) ? dataRows : null,
     pages: {},
   };
   await saveTask(taskId, payload);
@@ -129,6 +131,12 @@ async function cleanupExpiredTasks() {
   );
 }
 
+async function getTaskFileSize(taskId) {
+  const filePath = buildCacheFilePath(taskId);
+  const stat = await fsp.stat(filePath);
+  return stat.size;
+}
+
 module.exports = {
   CACHE_TTL_MS,
   buildPageToken,
@@ -139,4 +147,5 @@ module.exports = {
   getTaskPage,
   setTaskPage,
   cleanupExpiredTasks,
+  getTaskFileSize,
 };

@@ -272,6 +272,8 @@ app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
  * 支持分批写入（每批最多1000条记录）
  */
 app.post("/api/records", validateRequestSignature, async (req, res) => {
+    const startedAt = Date.now();
+    const traceId = `rec_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
     try {
         let data;
 
@@ -290,7 +292,7 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         limit = Math.min(limit, 1000); // 最大 1000
         
         // Keep runtime logs concise; avoid printing request details.
-        console.log(`[分页请求] offset=${config.offset}, pageToken=${config.pageToken || ''}, nextPageToken=${config.nextPageToken || ''}, limit=${limit}`);
+        console.log(`[分页请求] traceId=${traceId} offset=${config.offset}, pageToken=${config.pageToken || ''}, nextPageToken=${config.nextPageToken || ''}, limit=${limit}`);
         
         // 如果有 pageToken 或 nextPageToken，则使用它作为 offset
         // 支持两种参数名以确保兼容性
@@ -310,16 +312,16 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
 
         if (config.pageToken) {
             offset = parseTokenOffset(config.pageToken);
-            console.log(`[分页游标] 使用 pageToken, offset=${offset}`);
+            console.log(`[分页游标] traceId=${traceId} 使用 pageToken, offset=${offset}`);
         } else if (config.nextPageToken) {
             offset = parseTokenOffset(config.nextPageToken);
-            console.log(`[分页游标] 使用 nextPageToken, offset=${offset}`);
+            console.log(`[分页游标] traceId=${traceId} 使用 nextPageToken, offset=${offset}`);
         }
 
         // 判断数据源类型
         if (config.sqlserver) {
             // SQL Server 数据源
-            console.log(`[分页执行] source=sqlserver, offset=${offset}, limit=${limit}`);
+            console.log(`[分页执行] traceId=${traceId} source=sqlserver, offset=${offset}, limit=${limit}`);
             data = await getSqlServerTableRecords(
                 config.sqlserver,
                 config.fields,
@@ -336,14 +338,18 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
                 limit: limit,
                 pageToken: config.pageToken,
                 nextPageToken: config.nextPageToken,
+                traceId,
             };
-            console.log(`[分页执行] source=maxcompute, offset=${offset}, limit=${limit}`);
+            console.log(`[分页执行] traceId=${traceId} source=maxcompute, offset=${offset}, limit=${limit}`);
             data = await getTableRecords(configWithPaging);
         } else {
             const err = new Error("Missing data source config: sqlserver or maxcompute");
             err.statusCode = 400;
             throw err;
         }
+
+        const pageSize = Array.isArray(data?.records) ? data.records.length : 0;
+        console.log(`[分页完成] traceId=${traceId} pageSize=${pageSize} hasMore=${Boolean(data?.hasMore)} nextPageToken=${data?.nextPageToken || ''} durationMs=${Date.now() - startedAt}`);
 
         const result = {
             code: 0,
@@ -352,7 +358,7 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         };
         res.status(200).json(result);
     } catch (error) {
-        console.error("获取记录数据失败:", error.message);
+        console.error(`获取记录数据失败: traceId=${traceId} durationMs=${Date.now() - startedAt} message=${error.message}`);
         res.status(error.statusCode || 500).json({
             code: 500,
             message: "获取记录数据失败: " + error.message,
