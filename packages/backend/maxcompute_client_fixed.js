@@ -3,7 +3,7 @@ const path = require('path');
 
 const PYODPS_SCRIPT_PATH = path.join(__dirname, 'pyodps_runner.py');
 const PYODPS_COMMAND_TIMEOUT_MS = Math.max(
-  parseInt(process.env.PYODPS_COMMAND_TIMEOUT_MS || '120000', 10) || 120000,
+  parseInt(process.env.PYODPS_COMMAND_TIMEOUT_MS || '300000', 10) || 300000,
   10000
 );
 
