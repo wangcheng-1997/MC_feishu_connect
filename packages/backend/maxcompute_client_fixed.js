@@ -221,19 +221,61 @@ class PythonProcessManager {
 }
 
 const pythonProcessManager = new PythonProcessManager();
+const MAX_RETRY_COUNT = 2;
+const RETRY_DELAY_MS = 1000;
 
 async function runPyOdps(action, config) {
-  return pythonProcessManager.runCommand({
-    action,
-    endpoint: config.endpoint,
-    project: config.projectName,
-    access_id: config.accessId,
-    access_key: config.accessKey,
-    table_name: config.tableName || '',
-    sql: config.sql || '',
-    limit: config.limit,
-    offset: config.offset || 0,
-  });
+  let lastError = null;
+  
+  for (let retry = 0; retry <= MAX_RETRY_COUNT; retry++) {
+    const startTime = Date.now();
+    
+    if (retry > 0) {
+      console.log(`[MaxCompute] 第 ${retry} 次重试执行 ${action}, endpoint=${config.endpoint}`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * retry));
+    } else {
+      console.log(`[MaxCompute] 开始执行 ${action}, endpoint=${config.endpoint}, project=${config.projectName}`);
+    }
+    
+    try {
+      const result = await pythonProcessManager.runCommand({
+        action,
+        endpoint: config.endpoint,
+        project: config.projectName,
+        access_id: config.accessId,
+        access_key: config.accessKey,
+        table_name: config.tableName || '',
+        sql: config.sql || '',
+        limit: config.limit,
+        offset: config.offset || 0,
+      });
+      
+      const duration = Date.now() - startTime;
+      console.log(`[MaxCompute] ${action} 完成, success=${result.success}, 耗时=${duration}ms`);
+      
+      if (result.success) {
+        return result;
+      }
+      
+      lastError = new Error(result.message);
+      if (result.message && result.message.includes('timed out')) {
+        console.log(`[MaxCompute] ${action} 超时，准备重试...`);
+        continue;
+      }
+      throw lastError;
+      
+    } catch (error) {
+      lastError = error;
+      console.log(`[MaxCompute] ${action} 执行失败: ${error.message}`);
+      if (retry < MAX_RETRY_COUNT && (error.message.includes('timed out') || error.message.includes('timeout'))) {
+        console.log(`[MaxCompute] ${action} 准备第 ${retry + 1} 次重试...`);
+        continue;
+      }
+      throw lastError;
+    }
+  }
+  
+  throw lastError || new Error(`${action} 执行失败，已重试 ${MAX_RETRY_COUNT} 次`);
 }
 
 process.on('exit', () => {
