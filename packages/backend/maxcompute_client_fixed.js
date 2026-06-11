@@ -333,16 +333,36 @@ class MaxComputeClient {
     return result.data || [];
   }
 
-  async executeSQL(sql, limit = null, offset = 0) {
+  _buildLimitedSQL(sql, limit = null, offset = 0) {
     let finalSQL = String(sql || '').trim().replace(/;+\s*$/, '');
     const hasLimitClause = /\blimit\s+\d+(\s+offset\s+\d+)?\s*$/i.test(finalSQL);
     if (limit !== null && !hasLimitClause) {
       finalSQL = `${finalSQL} LIMIT ${limit} OFFSET ${offset}`;
     }
+    return finalSQL;
+  }
 
+  async executeSQL(sql, limit = null, offset = 0) {
+    const finalSQL = this._buildLimitedSQL(sql, limit, offset);
     const result = await runPyOdps('execute_sql', { ...this, sql: finalSQL, limit, offset });
     if (!result.success) throw new Error(result.message || '执行 SQL 失败');
     return result.data || [];
+  }
+
+  async getQueryMeta(sql) {
+    const finalSQL = this._buildLimitedSQL(sql, 1, 0);
+    const result = await runPyOdps('execute_sql', { ...this, sql: finalSQL, limit: 1, offset: 0 });
+    if (!result.success) throw new Error(result.message || '获取 SQL 字段失败');
+    const columns = Array.isArray(result.columns) ? result.columns : [];
+    if (columns.length === 0) {
+      throw new Error('自定义 SQL 未返回字段信息');
+    }
+    return {
+      Table: {
+        Name: 'custom_query',
+        Columns: columns,
+      },
+    };
   }
 
   async close() {}
@@ -389,4 +409,3 @@ function getEndpoint(region, networkType = 'public') {
 }
 
 module.exports = { MaxComputeClient, getEndpoint, ENDPOINT_CONFIG };
-

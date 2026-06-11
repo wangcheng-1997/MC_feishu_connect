@@ -46,36 +46,81 @@ class SqlServerClient {
     }
   }
 
+  _normalizeQuery(query) {
+    return String(query || '').trim().replace(/;+\s*$/, '');
+  }
+
+  _buildPagedQuery(query, limit = null, offset = 0) {
+    const normalizedQuery = this._normalizeQuery(query);
+    if (limit === null) {
+      return normalizedQuery;
+    }
+    if (!normalizedQuery.toUpperCase().includes('ORDER BY')) {
+      return `SELECT * FROM (${normalizedQuery}) AS subquery ORDER BY (SELECT 1) OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY`;
+    }
+    return `${normalizedQuery} OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY`;
+  }
+
+  _mapResultColumns(columns = {}) {
+    return Object.values(columns)
+      .sort((a, b) => (a.index || 0) - (b.index || 0))
+      .map((col) => ({
+        Name: col.name,
+        Type: String(col.type?.declaration || col.type?.name || 'NVARCHAR').toUpperCase(),
+        IsPrimaryKey: false,
+      }));
+  }
+
+  async queryWithColumnMeta(finalQuery, params = {}) {
+    const pool = await this.getPool();
+    const request = pool.request();
+
+    Object.keys(params).forEach(key => {
+      request.input(key, params[key]);
+    });
+
+    const result = await request.query(finalQuery);
+    return {
+      data: result.recordset || [],
+      columns: this._mapResultColumns(result.recordset?.columns || {}),
+    };
+  }
+
   async executeQuery(query, params = {}, limit = null, offset = 0) {
     try {
-      let finalQuery = query;
-      if (limit !== null) {
-        if (!query.toUpperCase().includes('ORDER BY')) {
-          finalQuery = `SELECT * FROM (${query}) AS subquery ORDER BY (SELECT 1) OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY`;
-        } else {
-          finalQuery = `${query} OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY`;
-        }
-      }
+      const finalQuery = this._buildPagedQuery(query, limit, offset);
       
       console.log(`[executeQuery] offset=${offset}, limit=${limit}, sql长度=${finalQuery.length}`);
       
-      const pool = await this.getPool();
-      const request = pool.request();
-
-      if (Object.keys(params).length > 0) {
-        Object.keys(params).forEach(key => {
-          request.input(key, params[key]);
-        });
-      }
-
-      const result = await request.query(finalQuery);
-      const data = result.recordset || [];
+      const { data } = await this.queryWithColumnMeta(finalQuery, params);
       console.log(`[executeQuery完成] 返回${data.length}条数据`);
       return data;
     } catch (error) {
       console.error('SQL Server 查询执行失败:', error.message);
       throw error;
     }
+  }
+
+  async getQueryMeta(query) {
+    const normalizedQuery = this._normalizeQuery(query);
+    const attempts = [
+      `SELECT TOP 1 * FROM (${normalizedQuery}) AS subquery`,
+      this._buildPagedQuery(normalizedQuery, 1, 0),
+    ];
+    let lastError = null;
+
+    for (const sqlText of attempts) {
+      try {
+        const { columns } = await this.queryWithColumnMeta(sqlText);
+        if (columns.length > 0) {
+          return { tableName: 'custom_query', columns };
+        }
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError || new Error('自定义 SQL 未返回字段信息');
   }
 
   async getTableMeta(tableName, schema = 'dbo') {

@@ -80,6 +80,14 @@ def execute_sql(endpoint, project_name, access_id, access_key, sql, limit=None):
             records = []
             row_count = 0
             schema = reader.schema
+            columns = [
+                {
+                    'Name': col.name,
+                    'Type': str(col.type),
+                    'Comment': ''
+                }
+                for col in schema.columns
+            ]
             for record in reader:
                 if limit is not None and row_count >= limit:
                     break
@@ -95,7 +103,7 @@ def execute_sql(endpoint, project_name, access_id, access_key, sql, limit=None):
                 records.append(record_dict)
                 row_count += 1
         
-        return {'success': True, 'data': records, 'total': row_count}
+        return {'success': True, 'data': records, 'columns': columns, 'total': row_count}
     except Exception as e:
         return {'success': False, 'message': str(e)}
 

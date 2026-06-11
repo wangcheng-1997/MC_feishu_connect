@@ -17,14 +17,21 @@ async function getTableMetaFromMaxCompute(config) {
     let tableName = config.tableName;
 
     if (config.sql) {
-      const inferredTableName = config.tableName || inferTableNameFromSql(config.sql);
-      if (!inferredTableName) {
-        throw new Error('Unable to infer table name from SQL. Please provide tableName explicitly.');
-      }
+      try {
+        const queryMeta = await client.getQueryMeta(config.sql);
+        columns = queryMeta.Table.Columns || [];
+        tableName = tableName || queryMeta.Table.Name || 'custom_query';
+      } catch (queryMetaError) {
+        const inferredTableName = config.tableName || inferTableNameFromSql(config.sql);
+        if (!inferredTableName) {
+          throw queryMetaError;
+        }
 
-      const tableMeta = await client.getTableMeta(inferredTableName);
-      columns = tableMeta.Table.Columns || [];
-      tableName = tableName || inferredTableName;
+        console.warn(`获取自定义 SQL 字段失败，回退到表元数据: ${queryMetaError.message}`);
+        const tableMeta = await client.getTableMeta(inferredTableName);
+        columns = tableMeta.Table.Columns || [];
+        tableName = tableName || inferredTableName;
+      }
     } else if (config.tableName) {
       const tableMeta = await client.getTableMeta(config.tableName);
       columns = tableMeta.Table.Columns || [];

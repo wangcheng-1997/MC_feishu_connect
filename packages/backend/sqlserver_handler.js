@@ -116,6 +116,22 @@ async function getSqlServerTableMeta(config) {
   const client = new SqlServerClient(config);
   
   try {
+    if (config.sql) {
+      try {
+        const queryMeta = await client.getQueryMeta(config.sql);
+        return generateTableMeta(
+          config.tableName || queryMeta.tableName,
+          queryMeta.columns,
+          config.primaryField
+        );
+      } catch (queryMetaError) {
+        if (!config.tableName) {
+          throw queryMetaError;
+        }
+        console.warn(`获取自定义 SQL 字段失败，回退到表元数据: ${queryMetaError.message}`);
+      }
+    }
+
     // 获取 SQL Server 表元数据
     const tableMeta = await client.getTableMeta(
       config.tableName, 
