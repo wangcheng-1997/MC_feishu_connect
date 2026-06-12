@@ -64,7 +64,7 @@ const FIELD_TYPE_NAMES = {
  * 将 MaxCompute 字段类型转换为飞书多维表格字段类型
  */
 function convertOdpsTypeToLark(odpsType) {
-  const baseType = odpsType.toUpperCase().split('(')[0].trim();
+  const baseType = String(odpsType || '').toUpperCase().split('(')[0].trim();
   return ODPS_TO_LARK_TYPE_MAP[baseType] || 1; // 默认文本类型
 }
 
@@ -72,12 +72,13 @@ function convertOdpsTypeToLark(odpsType) {
  * 获取字段属性配置
  */
 function getFieldProperty(odpsType, odpsColumn) {
-  const baseType = odpsType.toUpperCase().split('(')[0].trim();
+  const typeText = String(odpsType || '');
+  const baseType = typeText.toUpperCase().split('(')[0].trim();
   
   switch (baseType) {
     case 'DECIMAL':
       // 提取精度信息
-      const match = odpsType.match(/\((\d+),\s*(\d+)\)/);
+      const match = typeText.match(/\((\d+),\s*(\d+)\)/);
       return {
         formatter: `#,##0.00`,
       };

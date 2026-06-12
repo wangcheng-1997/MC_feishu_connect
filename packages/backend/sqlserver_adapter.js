@@ -83,7 +83,7 @@ const FIELD_TYPE_NAMES = {
  * 将 SQL Server 字段类型转换为飞书多维表格字段类型
  */
 function convertSqlServerTypeToLark(sqlServerType) {
-  const baseType = sqlServerType.toUpperCase().split('(')[0].trim();
+  const baseType = String(sqlServerType || '').toUpperCase().split('(')[0].trim();
   return SQLSERVER_TO_LARK_TYPE_MAP[baseType] || 1; // 默认文本类型
 }
 
@@ -91,13 +91,14 @@ function convertSqlServerTypeToLark(sqlServerType) {
  * 获取字段属性配置
  */
 function getFieldProperty(sqlServerType, sqlServerColumn) {
-  const baseType = sqlServerType.toUpperCase().split('(')[0].trim();
+  const typeText = String(sqlServerType || '');
+  const baseType = typeText.toUpperCase().split('(')[0].trim();
   
   switch (baseType) {
     case 'DECIMAL':
     case 'NUMERIC':
       // 提取精度信息
-      const match = sqlServerType.match(/\((\d+),\s*(\d+)\)/);
+      const match = typeText.match(/\((\d+),\s*(\d+)\)/);
       const scale = match ? parseInt(match[2]) : 2;
       return {
         formatter: `#,##0.${'0'.repeat(scale)}`,
@@ -194,15 +195,20 @@ function convertValueToLark(value, fieldType, sqlServerType) {
     
     case 2: // 数字
     case 8: // 货币
-      return Number(value);
+      {
+        const numericValue = Number(value);
+        return Number.isFinite(numericValue) ? numericValue : null;
+      }
     
     case 5: // 日期
       // SQL Server 日期格式转换为时间戳（毫秒）
       if (value instanceof Date) {
-        return value.getTime();
+        const timestamp = value.getTime();
+        return Number.isFinite(timestamp) ? timestamp : null;
       }
       if (typeof value === 'string') {
-        return new Date(value).getTime();
+        const timestamp = new Date(value).getTime();
+        return Number.isFinite(timestamp) ? timestamp : null;
       }
       return value;
     
@@ -226,21 +232,28 @@ function convertValueToLark(value, fieldType, sqlServerType) {
 /**
  * 将 SQL Server 数据行转换为飞书多维表格记录格式
  */
-function convertDataToLarkRecords(data, fields) {
+function getValueByFieldName(row, fieldName) {
+  if (row[fieldName] !== undefined) {
+    return row[fieldName];
+  }
+  const lowerFieldName = String(fieldName).toLowerCase();
+  const matchedKey = Object.keys(row).find(key => key.toLowerCase() === lowerFieldName);
+  return matchedKey ? row[matchedKey] : undefined;
+}
+
+function convertDataToLarkRecords(data, fields, offset = 0) {
   if (!Array.isArray(data) || data.length === 0) {
     return [];
   }
 
   return data.map((row, rowIndex) => {
     const record = {
-      primaryId: `record_${rowIndex + 1}`,
+      primaryId: `record_${offset + rowIndex + 1}`,
       data: {},
     };
 
     fields.forEach(field => {
-      // 处理字段名大小写问题
-      const fieldName = field.fieldName;
-      const value = row[fieldName] !== undefined ? row[fieldName] : row[fieldName.toLowerCase()];
+      const value = getValueByFieldName(row, field.fieldName);
       record.data[field.fieldId] = convertValueToLark(value, field.fieldType, null);
     });
 
@@ -263,8 +276,8 @@ function generateTableMeta(tableName, columns, primaryField = null) {
 /**
  * 生成表记录数据
  */
-function generateTableRecords(data, fields, hasMore = false, nextPageToken = '') {
-  const records = convertDataToLarkRecords(data, fields);
+function generateTableRecords(data, fields, hasMore = false, nextPageToken = '', offset = 0) {
+  const records = convertDataToLarkRecords(data, fields, offset);
   
   return {
     nextPageToken: nextPageToken,

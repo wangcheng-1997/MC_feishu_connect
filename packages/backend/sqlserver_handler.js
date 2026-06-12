@@ -188,7 +188,7 @@ async function getSqlServerTableRecords(config, fields, offset, limit) {
         fields = meta.fields;
       }
       
-      return generateTableRecords(data, fields, hasMore, nextPageToken);
+      return generateTableRecords(data, fields, hasMore, nextPageToken, batchOffset);
     } else {
       // 否则查询整个表
       data = await client.getTableData(config.tableName, schema, batchSize, batchOffset);
@@ -203,7 +203,7 @@ async function getSqlServerTableRecords(config, fields, offset, limit) {
         fields = meta.fields;
       }
       
-      return generateTableRecords(data, fields, hasMore, nextPageToken);
+      return generateTableRecords(data, fields, hasMore, nextPageToken, batchOffset);
     }
   } catch (error) {
     console.error('获取 SQL Server 表记录失败:', error);

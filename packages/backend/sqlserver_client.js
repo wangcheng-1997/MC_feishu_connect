@@ -55,10 +55,11 @@ class SqlServerClient {
     if (limit === null) {
       return normalizedQuery;
     }
-    if (!normalizedQuery.toUpperCase().includes('ORDER BY')) {
-      return `SELECT * FROM (${normalizedQuery}) AS subquery ORDER BY (SELECT 1) OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY`;
+    if (/\boffset\s+\d+\s+rows\b/i.test(normalizedQuery)) {
+      return normalizedQuery;
     }
-    return `${normalizedQuery} OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY`;
+    const orderByClause = /\border\s+by\b/i.test(normalizedQuery) ? '' : ' ORDER BY (SELECT 1)';
+    return `${normalizedQuery}${orderByClause} OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY`;
   }
 
   _mapResultColumns(columns = {}) {
@@ -103,24 +104,11 @@ class SqlServerClient {
 
   async getQueryMeta(query) {
     const normalizedQuery = this._normalizeQuery(query);
-    const attempts = [
-      `SELECT TOP 1 * FROM (${normalizedQuery}) AS subquery`,
-      this._buildPagedQuery(normalizedQuery, 1, 0),
-    ];
-    let lastError = null;
-
-    for (const sqlText of attempts) {
-      try {
-        const { columns } = await this.queryWithColumnMeta(sqlText);
-        if (columns.length > 0) {
-          return { tableName: 'custom_query', columns };
-        }
-      } catch (error) {
-        lastError = error;
-      }
+    const { columns } = await this.queryWithColumnMeta(this._buildPagedQuery(normalizedQuery, 1, 0));
+    if (columns.length > 0) {
+      return { tableName: 'custom_query', columns };
     }
-
-    throw lastError || new Error('自定义 SQL 未返回字段信息');
+    throw new Error('自定义 SQL 未返回字段信息');
   }
 
   async getTableMeta(tableName, schema = 'dbo') {
