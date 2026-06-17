@@ -258,6 +258,7 @@ def handle_command(command):
         access_key = command.get('access_key')
         table_name = command.get('table_name', '')
         sql = command.get('sql', '')
+        trace_id = command.get('trace_id', '')
         limit = command.get('limit')
         offset = command.get('offset', 0)
         cache_dir = command.get('cache_dir', '')
@@ -282,11 +283,15 @@ def handle_command(command):
         
         if request_id is not None:
             result['request_id'] = request_id
+        if trace_id:
+            result['trace_id'] = trace_id
         return result
     except Exception as e:
         result = {'success': False, 'message': str(e)}
         if request_id is not None:
             result['request_id'] = request_id
+        if 'trace_id' in locals() and trace_id:
+            result['trace_id'] = trace_id
         return result
 
 if __name__ == '__main__':

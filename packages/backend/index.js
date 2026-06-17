@@ -48,6 +48,17 @@ function validateRequestSignature(req, res, next) {
 
 const app = express();
 
+function formatLogValue(value) {
+    return String(value).replace(/\s+/g, "_");
+}
+
+function logRecordsEvent(event, details = {}, level = "log") {
+    const parts = Object.entries(details)
+        .filter(([, value]) => value !== undefined && value !== null && value !== "")
+        .map(([key, value]) => `${key}=${formatLogValue(value)}`);
+    console[level](`[records] event=${event}${parts.length ? ` ${parts.join(" ")}` : ""}`);
+}
+
 // 跨域支持
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
@@ -292,7 +303,13 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         limit = Math.min(limit, 1000); // 最大 1000
         
         // Keep runtime logs concise; avoid printing request details.
-        console.log(`[分页请求] traceId=${traceId} offset=${config.offset}, pageToken=${config.pageToken || ''}, nextPageToken=${config.nextPageToken || ''}, limit=${limit}`);
+        logRecordsEvent("request", {
+            traceId,
+            offset: config.offset,
+            pageToken: config.pageToken || "",
+            nextPageToken: config.nextPageToken || "",
+            limit,
+        });
         
         // 如果有 pageToken 或 nextPageToken，则使用它作为 offset
         // 支持两种参数名以确保兼容性
@@ -312,16 +329,16 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
 
         if (config.pageToken) {
             offset = parseTokenOffset(config.pageToken);
-            console.log(`[分页游标] traceId=${traceId} 使用 pageToken, offset=${offset}`);
+            logRecordsEvent("cursor", { traceId, source: "pageToken", offset });
         } else if (config.nextPageToken) {
             offset = parseTokenOffset(config.nextPageToken);
-            console.log(`[分页游标] traceId=${traceId} 使用 nextPageToken, offset=${offset}`);
+            logRecordsEvent("cursor", { traceId, source: "nextPageToken", offset });
         }
 
         // 判断数据源类型
         if (config.sqlserver) {
             // SQL Server 数据源
-            console.log(`[分页执行] traceId=${traceId} source=sqlserver, offset=${offset}, limit=${limit}`);
+            logRecordsEvent("source_execute", { traceId, source: "sqlserver", offset, limit });
             data = await getSqlServerTableRecords(
                 config.sqlserver,
                 config.fields,
@@ -332,7 +349,10 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
             // MaxCompute 数据源（默认）
             // 构建配置，确保分页参数正确传递
             const configWithPaging = {
-                maxcompute: config.maxcompute,
+                maxcompute: {
+                    ...config.maxcompute,
+                    traceId,
+                },
                 fields: config.fields,
                 offset: offset,
                 limit: limit,
@@ -340,7 +360,7 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
                 nextPageToken: config.nextPageToken,
                 traceId,
             };
-            console.log(`[分页执行] traceId=${traceId} source=maxcompute, offset=${offset}, limit=${limit}`);
+            logRecordsEvent("source_execute", { traceId, source: "maxcompute", offset, limit });
             data = await getTableRecords(configWithPaging);
         } else {
             const err = new Error("Missing data source config: sqlserver or maxcompute");
@@ -349,7 +369,13 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         }
 
         const pageSize = Array.isArray(data?.records) ? data.records.length : 0;
-        console.log(`[分页完成] traceId=${traceId} pageSize=${pageSize} hasMore=${Boolean(data?.hasMore)} nextPageToken=${data?.nextPageToken || ''} durationMs=${Date.now() - startedAt}`);
+        logRecordsEvent("done", {
+            traceId,
+            pageSize,
+            hasMore: Boolean(data?.hasMore),
+            nextPageToken: data?.nextPageToken || "",
+            durationMs: Date.now() - startedAt,
+        });
 
         const result = {
             code: 0,
@@ -358,7 +384,7 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         };
         res.status(200).json(result);
     } catch (error) {
-        console.error(`获取记录数据失败: traceId=${traceId} durationMs=${Date.now() - startedAt} message=${error.message}`);
+        logRecordsEvent("failed", { traceId, durationMs: Date.now() - startedAt, message: error.message }, "error");
         res.status(error.statusCode || 500).json({
             code: 500,
             message: "获取记录数据失败: " + error.message,

@@ -7,6 +7,17 @@ const PYODPS_COMMAND_TIMEOUT_MS = Math.max(
   10000
 );
 
+function formatLogValue(value) {
+  return String(value).replace(/\s+/g, '_');
+}
+
+function logMaxCompute(event, details = {}, level = 'log') {
+  const parts = Object.entries(details)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => `${key}=${formatLogValue(value)}`);
+  console[level](`[maxcompute_client] event=${event}${parts.length ? ` ${parts.join(' ')}` : ''}`);
+}
+
 class PythonProcessManager {
   constructor() {
     this.process = null;
@@ -64,7 +75,7 @@ class PythonProcessManager {
       proc.stderr.on('data', (data) => {
         const chunk = data.toString();
         startupErr += chunk;
-        console.error(`Python stderr length=${chunk.length}`);
+        logMaxCompute('python_stderr_startup', { bytes: chunk.length }, 'error');
       });
       proc.on('close', (code) => {
         this.process = null;
@@ -97,7 +108,12 @@ class PythonProcessManager {
 
     this.process.stderr.on('data', (data) => {
       const chunk = data.toString();
-      console.error(`Python stderr length=${chunk.length}`);
+      logMaxCompute('python_stderr', {
+        traceId: this.activeTask?.command?.trace_id,
+        requestId: this.activeTask?.requestId,
+        action: this.activeTask?.command?.action,
+        bytes: chunk.length,
+      }, 'error');
     });
 
     this.process.on('close', () => {
@@ -136,7 +152,12 @@ class PythonProcessManager {
     try {
       result = JSON.parse(trimmed);
     } catch {
-      console.error(`JSON parse error, length=${trimmed.length}`);
+      logMaxCompute('python_json_parse_error', {
+        traceId: this.activeTask?.command?.trace_id,
+        requestId: this.activeTask?.requestId,
+        action: this.activeTask?.command?.action,
+        bytes: trimmed.length,
+      }, 'error');
       if (this.activeTask) {
         const task = this.activeTask;
         this.activeTask = null;
@@ -226,20 +247,22 @@ const RETRY_DELAY_MS = 1000;
 
 async function runPyOdps(action, config) {
   let lastError = null;
+  const traceId = config.traceId || '';
   
   for (let retry = 0; retry <= MAX_RETRY_COUNT; retry++) {
     const startTime = Date.now();
     
     if (retry > 0) {
-      console.log(`[MaxCompute] 第 ${retry} 次重试执行 ${action}, endpoint=${config.endpoint}`);
+      logMaxCompute('retry_start', { traceId, action, attempt: retry, endpoint: config.endpoint, project: config.projectName });
       await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * retry));
     } else {
-      console.log(`[MaxCompute] 开始执行 ${action}, endpoint=${config.endpoint}, project=${config.projectName}`);
+      logMaxCompute('start', { traceId, action, endpoint: config.endpoint, project: config.projectName });
     }
     
     try {
       const result = await pythonProcessManager.runCommand({
         action,
+        trace_id: traceId,
         endpoint: config.endpoint,
         project: config.projectName,
         access_id: config.accessId,
@@ -255,7 +278,17 @@ async function runPyOdps(action, config) {
       });
       
       const duration = Date.now() - startTime;
-      console.log(`[MaxCompute] ${action} 完成, success=${result.success}, 耗时=${duration}ms`);
+      logMaxCompute('done', {
+        traceId,
+        action,
+        success: result.success,
+        durationMs: duration,
+        taskId: result.taskId,
+        total: result.total,
+        executeMs: result.timing?.executeMs,
+        waitMs: result.timing?.waitMs,
+        readWriteMs: result.timing?.readWriteMs,
+      });
       
       if (result.success) {
         return result;
@@ -263,16 +296,16 @@ async function runPyOdps(action, config) {
       
       lastError = new Error(result.message);
       if (result.message && result.message.includes('timed out')) {
-        console.log(`[MaxCompute] ${action} 超时，准备重试...`);
+        logMaxCompute('retry_scheduled', { traceId, action, attempt: retry + 1, reason: result.message });
         continue;
       }
       throw lastError;
       
     } catch (error) {
       lastError = error;
-      console.log(`[MaxCompute] ${action} 执行失败: ${error.message}`);
+      logMaxCompute('failed', { traceId, action, attempt: retry, message: error.message }, 'error');
       if (retry < MAX_RETRY_COUNT && (error.message.includes('timed out') || error.message.includes('timeout'))) {
-        console.log(`[MaxCompute] ${action} 准备第 ${retry + 1} 次重试...`);
+        logMaxCompute('retry_scheduled', { traceId, action, attempt: retry + 1, reason: error.message });
         continue;
       }
       throw lastError;
@@ -294,6 +327,7 @@ class MaxComputeClient {
     this.projectName = config.projectName;
     this.schemaName = config.schemaName || 'default';
     this.region = config.region || this._extractRegionFromEndpoint(config.endpoint);
+    this.traceId = config.traceId || '';
   }
 
   _extractRegionFromEndpoint(endpoint) {
