@@ -248,6 +248,10 @@ async function runPyOdps(action, config) {
         sql: config.sql || '',
         limit: config.limit,
         offset: config.offset || 0,
+        cache_dir: config.cacheDir || '',
+        query_signature: config.querySignature || '',
+        page_size: config.pageSize,
+        task_id: config.taskId || '',
       });
       
       const duration = Date.now() - startTime;
@@ -347,6 +351,20 @@ class MaxComputeClient {
     const result = await runPyOdps('execute_sql', { ...this, sql: finalSQL, limit, offset });
     if (!result.success) throw new Error(result.message || '执行 SQL 失败');
     return result.data || [];
+  }
+
+  async executeSQLToCache(sql, cacheDir, querySignature, pageSize = 1000, taskId = '') {
+    const finalSQL = this._buildLimitedSQL(sql, null, 0);
+    const result = await runPyOdps('execute_sql_to_cache', {
+      ...this,
+      sql: finalSQL,
+      cacheDir,
+      querySignature,
+      pageSize,
+      taskId,
+    });
+    if (!result.success) throw new Error(result.message || '执行 SQL 写缓存失败');
+    return result;
   }
 
   async getQueryMeta(sql) {

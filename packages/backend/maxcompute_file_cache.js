@@ -226,6 +226,7 @@ async function getTaskFileSize(taskId) {
 }
 
 module.exports = {
+  CACHE_DIR,
   CACHE_TTL_MS,
   buildPageToken,
   parsePageToken,
