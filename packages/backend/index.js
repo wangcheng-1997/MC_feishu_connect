@@ -6,6 +6,7 @@ const DataSourceFactory = require("./data_source_factory.js");
 const { judgeEncryptSignValid, setSecretKey } = require("./request_sign.js");
 const { getTableMeta } = require("./table_meta_fixed.js");
 const { getTableRecords } = require("./table_records.js");
+const { createSyncStageLogger, logAppEvent, logSyncFailure } = require("./sync_logger.js");
 const {
     getSqlServerTableMeta,
     getSqlServerTableRecords,
@@ -48,23 +49,42 @@ function validateRequestSignature(req, res, next) {
 
 const app = express();
 
-function formatLogValue(value) {
-    return String(value).replace(/\s+/g, "_");
-}
-
-function logScopedEvent(scope, event, details = {}, level = "log") {
-    const parts = Object.entries(details)
-        .filter(([, value]) => value !== undefined && value !== null && value !== "")
-        .map(([key, value]) => `${key}=${formatLogValue(value)}`);
-    console[level](`[${scope}] event=${event}${parts.length ? ` ${parts.join(" ")}` : ""}`);
-}
-
-function logRecordsEvent(event, details = {}, level = "log") {
-    logScopedEvent("records", event, details, level);
-}
-
 function logTableMetaEvent(event, details = {}, level = "log") {
-    logScopedEvent("table_meta", event, details, level);
+    const { object, sourceName, ...rest } = details;
+    logAppEvent("table_meta", event, {
+        ...rest,
+        objectType: object,
+        objectName: sourceName,
+    }, level);
+}
+
+function firstNonEmpty(...values) {
+    return values.find((value) => value !== undefined && value !== null && value !== "");
+}
+
+function getSourceConfig(config) {
+    if (config?.maxcompute) {
+        return { source: "maxcompute", config: config.maxcompute };
+    }
+    if (config?.sqlserver) {
+        return { source: "sqlserver", config: config.sqlserver };
+    }
+    return { source: "", config: {} };
+}
+
+function buildSyncContext(config, traceId) {
+    const sourceInfo = getSourceConfig(config);
+    const sourceConfig = sourceInfo.config || {};
+    const object = sourceConfig.sql ? "query" : "table";
+    return {
+        traceId,
+        tableId: firstNonEmpty(config?.tableId, sourceConfig.tableId, "unknown"),
+        source: sourceInfo.source,
+        object,
+        sourceName: object === "query"
+            ? firstNonEmpty(sourceConfig.tableName, "custom_query")
+            : firstNonEmpty(sourceConfig.tableName, "unknown"),
+    };
 }
 
 // 跨域支持
@@ -146,6 +166,10 @@ function parseLarkParams(body) {
                 if (params.fields && !config.fields) {
                     config.fields = params.fields;
                 }
+                const tableId = firstNonEmpty(params.tableId, params.table_id, params.tableID);
+                if (tableId && !config.tableId) {
+                    config.tableId = tableId;
+                }
                 
                 return config;
             }
@@ -187,6 +211,16 @@ function normalizeDataSourceConfig(body) {
     if (body && body.nextPageToken !== undefined && config.nextPageToken === undefined) {
         config.nextPageToken = body.nextPageToken;
     }
+    const tableId = firstNonEmpty(body?.tableId, body?.table_id, body?.tableID, config.tableId);
+    if (tableId && !config.tableId) {
+        config.tableId = tableId;
+    }
+    if (tableId && config.maxcompute && !config.maxcompute.tableId) {
+        config.maxcompute.tableId = tableId;
+    }
+    if (tableId && config.sqlserver && !config.sqlserver.tableId) {
+        config.sqlserver.tableId = tableId;
+    }
 
     if (config.maxcompute || config.sqlserver) {
         return config;
@@ -200,6 +234,7 @@ function normalizeDataSourceConfig(body) {
             limit: config.limit,
             pageToken: config.pageToken,
             nextPageToken: config.nextPageToken,
+            tableId: config.tableId,
         };
     }
 
@@ -211,6 +246,7 @@ function normalizeDataSourceConfig(body) {
             limit: config.limit,
             pageToken: config.pageToken,
             nextPageToken: config.nextPageToken,
+            tableId: config.tableId,
         };
     }
 
@@ -224,6 +260,7 @@ function normalizeDataSourceConfig(body) {
             limit: config.limit,
             pageToken: config.pageToken,
             nextPageToken: config.nextPageToken,
+            tableId: config.tableId,
         };
     }
 
@@ -237,6 +274,7 @@ function normalizeDataSourceConfig(body) {
             limit: config.limit,
             pageToken: config.pageToken,
             nextPageToken: config.nextPageToken,
+            tableId: config.tableId,
         };
     }
 
@@ -259,14 +297,15 @@ app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
             err.statusCode = 400;
             throw err;
         }
+        const metaContext = buildSyncContext(config, traceId);
 
         // 判断数据源类型
         if (config.sqlserver) {
-            logTableMetaEvent("source_execute", { traceId, source: "sqlserver" });
+            logTableMetaEvent("source_execute", metaContext);
             data = await getSqlServerTableMeta(config.sqlserver);
         } else if (config.maxcompute) {
             config.maxcompute.traceId = config.maxcompute.traceId || traceId;
-            logTableMetaEvent("source_execute", { traceId, source: "maxcompute" });
+            logTableMetaEvent("source_execute", metaContext);
             data = await getTableMeta(config);
         } else {
             const err = new Error("Missing data source config: sqlserver or maxcompute");
@@ -280,7 +319,7 @@ app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
             data: data,
         };
         const fieldCount = Array.isArray(data?.fields) ? data.fields.length : 0;
-        logTableMetaEvent("done", { traceId, fieldCount, durationMs: Date.now() - startedAt });
+        logTableMetaEvent("done", { ...metaContext, fieldCount, durationMs: Date.now() - startedAt });
         res.status(200).json(result);
     } catch (error) {
         logTableMetaEvent("failed", { traceId, durationMs: Date.now() - startedAt, message: error.message }, "error");
@@ -300,6 +339,7 @@ app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
 app.post("/api/records", validateRequestSignature, async (req, res) => {
     const startedAt = Date.now();
     const traceId = `rec_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    let syncContext = { traceId, tableId: "unknown" };
     try {
         let data;
 
@@ -316,15 +356,6 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         // limit 优先级：顶层 limit > maxcompute.limit/sqlserver.limit > 默认 1000
         let limit = parseInt(config.limit) || parseInt(config.maxcompute?.limit) || parseInt(config.sqlserver?.limit) || 1000;
         limit = Math.min(limit, 1000); // 最大 1000
-        
-        // Keep runtime logs concise; avoid printing request details.
-        logRecordsEvent("request", {
-            traceId,
-            offset: config.offset,
-            pageToken: config.pageToken || "",
-            nextPageToken: config.nextPageToken || "",
-            limit,
-        });
         
         // 如果有 pageToken 或 nextPageToken，则使用它作为 offset
         // 支持两种参数名以确保兼容性
@@ -344,22 +375,30 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
 
         if (config.pageToken) {
             offset = parseTokenOffset(config.pageToken);
-            logRecordsEvent("cursor", { traceId, source: "pageToken", offset });
         } else if (config.nextPageToken) {
             offset = parseTokenOffset(config.nextPageToken);
-            logRecordsEvent("cursor", { traceId, source: "nextPageToken", offset });
         }
+        syncContext = buildSyncContext(config, traceId);
 
         // 判断数据源类型
         if (config.sqlserver) {
             // SQL Server 数据源
-            logRecordsEvent("source_execute", { traceId, source: "sqlserver", offset, limit });
+            const logStage = createSyncStageLogger(syncContext, 3);
+            logStage(1, "request", { offset, limit, hasPageToken: Boolean(config.pageToken || config.nextPageToken) });
             data = await getSqlServerTableRecords(
                 config.sqlserver,
                 config.fields,
                 offset,
                 limit
             );
+            const pageSize = Array.isArray(data?.records) ? data.records.length : 0;
+            logStage(2, "source_fetch", { offset, limit, pageSize, hasMore: Boolean(data?.hasMore) });
+            logStage(3, "done", {
+                pageSize,
+                hasMore: Boolean(data?.hasMore),
+                nextPageToken: data?.nextPageToken || "",
+                totalDurationMs: Date.now() - startedAt,
+            });
         } else if (config.maxcompute) {
             // MaxCompute 数据源（默认）
             // 构建配置，确保分页参数正确传递
@@ -367,6 +406,8 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
                 maxcompute: {
                     ...config.maxcompute,
                     traceId,
+                    tableId: syncContext.tableId,
+                    syncContext,
                 },
                 fields: config.fields,
                 offset: offset,
@@ -375,22 +416,12 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
                 nextPageToken: config.nextPageToken,
                 traceId,
             };
-            logRecordsEvent("source_execute", { traceId, source: "maxcompute", offset, limit });
             data = await getTableRecords(configWithPaging);
         } else {
             const err = new Error("Missing data source config: sqlserver or maxcompute");
             err.statusCode = 400;
             throw err;
         }
-
-        const pageSize = Array.isArray(data?.records) ? data.records.length : 0;
-        logRecordsEvent("done", {
-            traceId,
-            pageSize,
-            hasMore: Boolean(data?.hasMore),
-            nextPageToken: data?.nextPageToken || "",
-            durationMs: Date.now() - startedAt,
-        });
 
         const result = {
             code: 0,
@@ -399,7 +430,7 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         };
         res.status(200).json(result);
     } catch (error) {
-        logRecordsEvent("failed", { traceId, durationMs: Date.now() - startedAt, message: error.message }, "error");
+        logSyncFailure(syncContext, { totalDurationMs: Date.now() - startedAt, message: error.message });
         res.status(error.statusCode || 500).json({
             code: 500,
             message: "获取记录数据失败: " + error.message,

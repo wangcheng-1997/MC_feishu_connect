@@ -1,5 +1,6 @@
 const { spawn } = require('child_process');
 const path = require('path');
+const { isDebugEnabled, logAppEvent } = require('./sync_logger.js');
 
 const PYODPS_SCRIPT_PATH = path.join(__dirname, 'pyodps_runner.py');
 const PYODPS_COMMAND_TIMEOUT_MS = Math.max(
@@ -7,15 +8,8 @@ const PYODPS_COMMAND_TIMEOUT_MS = Math.max(
   10000
 );
 
-function formatLogValue(value) {
-  return String(value).replace(/\s+/g, '_');
-}
-
 function logMaxCompute(event, details = {}, level = 'log') {
-  const parts = Object.entries(details)
-    .filter(([, value]) => value !== undefined && value !== null && value !== '')
-    .map(([key, value]) => `${key}=${formatLogValue(value)}`);
-  console[level](`[maxcompute_client] event=${event}${parts.length ? ` ${parts.join(' ')}` : ''}`);
+  logAppEvent('maxcompute_client', event, details, level);
 }
 
 class PythonProcessManager {
@@ -248,6 +242,7 @@ const RETRY_DELAY_MS = 1000;
 async function runPyOdps(action, config) {
   let lastError = null;
   const traceId = config.traceId || '';
+  const shouldLogClientLifecycle = !traceId || isDebugEnabled();
   
   for (let retry = 0; retry <= MAX_RETRY_COUNT; retry++) {
     const startTime = Date.now();
@@ -255,7 +250,7 @@ async function runPyOdps(action, config) {
     if (retry > 0) {
       logMaxCompute('retry_start', { traceId, action, attempt: retry, endpoint: config.endpoint, project: config.projectName });
       await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * retry));
-    } else {
+    } else if (shouldLogClientLifecycle) {
       logMaxCompute('start', { traceId, action, endpoint: config.endpoint, project: config.projectName });
     }
     
@@ -277,18 +272,20 @@ async function runPyOdps(action, config) {
         task_id: config.taskId || '',
       });
       
-      const duration = Date.now() - startTime;
-      logMaxCompute('done', {
-        traceId,
-        action,
-        success: result.success,
-        durationMs: duration,
-        taskId: result.taskId,
-        total: result.total,
-        executeMs: result.timing?.executeMs,
-        waitMs: result.timing?.waitMs,
-        readWriteMs: result.timing?.readWriteMs,
-      });
+      if (shouldLogClientLifecycle) {
+        const duration = Date.now() - startTime;
+        logMaxCompute('done', {
+          traceId,
+          action,
+          success: result.success,
+          durationMs: duration,
+          taskId: result.taskId,
+          total: result.total,
+          executeMs: result.timing?.executeMs,
+          waitMs: result.timing?.waitMs,
+          readWriteMs: result.timing?.readWriteMs,
+        });
+      }
       
       if (result.success) {
         return result;
