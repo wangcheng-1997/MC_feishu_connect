@@ -1,5 +1,5 @@
 const { MaxComputeClient } = require('./maxcompute_client_fixed.js');
-const { generateTableRecords } = require('./maxcompute_adapter.js');
+const { generateTableMeta, generateTableRecords } = require('./maxcompute_adapter.js');
 const { getSqlServerTableRecords } = require('./sqlserver_handler.js');
 const {
   CACHE_DIR,
@@ -18,11 +18,26 @@ function logTaskStage(stage, details = {}) {
   console.log(`[maxcompute_sync] stage=${stage}${parts.length ? ` ${parts.join(' ')}` : ''}`);
 }
 
-function ensureFields(fields) {
+function hasFields(fields) {
   if (Array.isArray(fields) && fields.length > 0) {
-    return fields;
+    return true;
   }
-  throw new Error('Missing field definitions for record conversion');
+  return false;
+}
+
+function buildFieldsFromCachedResult(config, cachedResult) {
+  const columns = Array.isArray(cachedResult.columns) ? cachedResult.columns : [];
+  if (columns.length === 0) {
+    throw new Error('Missing field definitions for record conversion');
+  }
+  return generateTableMeta(config.tableName || 'custom_query', columns, config.primaryField).fields;
+}
+
+function buildFieldsFromColumns(config, columns) {
+  if (!Array.isArray(columns) || columns.length === 0) {
+    return null;
+  }
+  return generateTableMeta(config.tableName || 'custom_query', columns, config.primaryField).fields;
 }
 
 function buildSourceSQL(config) {
@@ -65,7 +80,7 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
     const startAt = Date.now();
     const withTrace = (details = {}) => ({ traceId, ...details });
     const client = new MaxComputeClient(config);
-    const normalizedFields = ensureFields(fields);
+    let normalizedFields = hasFields(fields) ? fields : null;
     const querySignature = buildQuerySignature(config);
     
     const batchSize = Math.min(limit, 1000);
@@ -82,9 +97,11 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
       let pageRows = null;
       let totalRows = 0;
       let hasMore = false;
+      let cachePayload = null;
       logTaskStage('token_parsed', withTrace({ taskId, pageOffset }));
       try {
         const { payload, page } = await getTaskPage(tokenInfo.taskId, pageOffset, querySignature, { pageSize: batchSize });
+        cachePayload = payload;
         if (payload.pageSize && payload.pageSize !== batchSize) {
           throw new Error('Cache page size mismatch');
         }
@@ -103,7 +120,8 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
         const cachedResult = await executeSourceToPageCache(client, config, querySignature, batchSize);
         taskId = cachedResult.taskId;
         totalRows = cachedResult.total || 0;
-        const { page } = await getTaskPage(taskId, pageOffset, querySignature, { pageSize: batchSize });
+        const { payload, page } = await getTaskPage(taskId, pageOffset, querySignature, { pageSize: batchSize });
+        cachePayload = payload;
         pageRows = page && Array.isArray(page.rows) ? page.rows : [];
         hasMore = page ? Boolean(page.hasMore) : false;
         const cacheFileBytes = await getTaskFileSize(taskId).catch(() => 0);
@@ -121,6 +139,13 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
       }
 
       if (pageRows) {
+        if (!normalizedFields) {
+          normalizedFields = buildFieldsFromColumns(config, cachePayload?.columns);
+        }
+        if (!normalizedFields) {
+          const meta = await require('./table_meta_fixed.js').getTableMetaFromMaxCompute(config);
+          normalizedFields = meta.fields;
+        }
         const nextPageToken = hasMore ? buildPageToken(taskId, pageOffset + batchSize) : '';
         logTaskStage('return_cached_page', withTrace({
           taskId,
@@ -140,6 +165,9 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
     logTaskStage('source_fetch_start', withTrace({ taskId: 'new', pageOffset: 0, batchSize: 'all', mode: config.sql ? 'sql' : 'table' }));
     const cachedResult = await executeSourceToPageCache(client, config, querySignature, batchSize);
     const taskId = cachedResult.taskId;
+    if (!normalizedFields) {
+      normalizedFields = buildFieldsFromCachedResult(config, cachedResult);
+    }
     const pageRows = Array.isArray(cachedResult.data) ? cachedResult.data : [];
     const hasMore = Boolean(cachedResult.hasMore);
     const cacheFileBytes = await getTaskFileSize(taskId).catch(() => 0);
@@ -228,20 +256,12 @@ function getDefaultTableRecords() {
 async function getTableRecords(reqBody = {}) {
   // 如果请求中包含 MaxCompute 配置，则使用配置获取数据
   if (reqBody && reqBody.maxcompute) {
-    // 如果没有提供字段定义，先获取表元数据
-    let fields = reqBody.fields;
-    if (!fields || fields.length === 0) {
-      const { getTableMetaFromMaxCompute } = require('./table_meta_fixed.js');
-      const meta = await getTableMetaFromMaxCompute(reqBody.maxcompute);
-      fields = meta.fields;
-    }
-
     // 获取分页参数
     const offset = parseInt(reqBody.offset) || 0;
     const limit = Math.min(parseInt(reqBody.limit) || 1000, 1000);
     const pageToken = reqBody.pageToken || reqBody.nextPageToken || '';
     
-    return await getTableRecordsFromMaxCompute(reqBody.maxcompute, fields, offset, limit, pageToken);
+    return await getTableRecordsFromMaxCompute(reqBody.maxcompute, reqBody.fields, offset, limit, pageToken);
   }
   
   // 如果请求中包含 SQL Server 配置

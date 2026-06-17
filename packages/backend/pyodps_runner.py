@@ -215,6 +215,7 @@ def execute_sql_to_cache(endpoint, project_name, access_id, access_key, sql, cac
             'total': total,
             'pageSize': page_size,
             'rows': None,
+            'columns': columns,
             'pages': pages,
         }
         write_json_file(os.path.join(cache_dir, f"{task_id}.json"), metadata)
