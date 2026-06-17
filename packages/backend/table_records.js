@@ -19,11 +19,20 @@ function hasFields(fields) {
   return false;
 }
 
-function buildMaxComputeSyncContext(config, traceId) {
+function buildMaxComputeSyncContext(config, traceId, tokenInfo = null) {
   const object = config.sql ? 'query' : 'table';
-  return config.syncContext || {
+  const fallbackTableId = config.tableId || tokenInfo?.tableId || 'unknown';
+  if (config.syncContext) {
+    return {
+      ...config.syncContext,
+      tableId: config.syncContext.tableId && config.syncContext.tableId !== 'unknown'
+        ? config.syncContext.tableId
+        : fallbackTableId,
+    };
+  }
+  return {
     traceId,
-    tableId: config.tableId || 'unknown',
+    tableId: fallbackTableId,
     source: 'maxcompute',
     object,
     sourceName: object === 'query' ? (config.tableName || 'custom_query') : (config.tableName || 'unknown'),
@@ -84,7 +93,7 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
   const startAt = Date.now();
   const batchSize = Math.min(limit, 1000);
   const tokenInfo = parsePageToken(pageToken);
-  const syncContext = buildMaxComputeSyncContext(config, traceId);
+  const syncContext = buildMaxComputeSyncContext(config, traceId, tokenInfo);
   const logStage = createSyncStageLogger(syncContext, tokenInfo ? 4 : 3);
 
   try {
@@ -163,7 +172,7 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
           normalizedFields = meta.fields;
           fieldSource = 'meta_probe';
         }
-        const nextPageToken = hasMore ? buildPageToken(taskId, pageOffset + batchSize) : '';
+        const nextPageToken = hasMore ? buildPageToken(taskId, pageOffset + batchSize, syncContext.tableId) : '';
         const doneDetails = {
           taskId,
           pageOffset,
@@ -201,7 +210,7 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
       readWriteMs: cachedResult.timing?.readWriteMs,
       cacheFileBytes,
     });
-    const nextPageToken = hasMore ? buildPageToken(taskId, pageOffset + batchSize) : '';
+    const nextPageToken = hasMore ? buildPageToken(taskId, pageOffset + batchSize, syncContext.tableId) : '';
     logStage(3, 'done', {
       taskId,
       pageOffset,

@@ -62,6 +62,50 @@ function firstNonEmpty(...values) {
     return values.find((value) => value !== undefined && value !== null && value !== "");
 }
 
+function parseJsonObject(value) {
+    if (typeof value !== "string") return null;
+    const text = value.trim();
+    if (!text || (text[0] !== "{" && text[0] !== "[")) return null;
+    try {
+        return JSON.parse(text);
+    } catch (_) {
+        return null;
+    }
+}
+
+function extractTableId(value, depth = 0, seen = new Set()) {
+    if (value === undefined || value === null || depth > 6) return "";
+    if (typeof value === "string") {
+        const parsed = parseJsonObject(value);
+        return parsed ? extractTableId(parsed, depth + 1, seen) : "";
+    }
+    if (typeof value !== "object") return "";
+    if (seen.has(value)) return "";
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const tableId = extractTableId(item, depth + 1, seen);
+            if (tableId) return tableId;
+        }
+        return "";
+    }
+
+    for (const [key, item] of Object.entries(value)) {
+        const normalizedKey = key.toLowerCase().replace(/[_-]/g, "");
+        if (normalizedKey === "tableid" && item !== undefined && item !== null && item !== "") {
+            return String(item);
+        }
+    }
+
+    for (const item of Object.values(value)) {
+        const tableId = extractTableId(item, depth + 1, seen);
+        if (tableId) return tableId;
+    }
+
+    return "";
+}
+
 function getSourceConfig(config) {
     if (config?.maxcompute) {
         return { source: "maxcompute", config: config.maxcompute };
@@ -166,7 +210,7 @@ function parseLarkParams(body) {
                 if (params.fields && !config.fields) {
                     config.fields = params.fields;
                 }
-                const tableId = firstNonEmpty(params.tableId, params.table_id, params.tableID);
+                const tableId = firstNonEmpty(params.tableId, params.table_id, params.tableID, extractTableId(params));
                 if (tableId && !config.tableId) {
                     config.tableId = tableId;
                 }
@@ -211,7 +255,7 @@ function normalizeDataSourceConfig(body) {
     if (body && body.nextPageToken !== undefined && config.nextPageToken === undefined) {
         config.nextPageToken = body.nextPageToken;
     }
-    const tableId = firstNonEmpty(body?.tableId, body?.table_id, body?.tableID, config.tableId);
+    const tableId = firstNonEmpty(body?.tableId, body?.table_id, body?.tableID, config.tableId, extractTableId(body));
     if (tableId && !config.tableId) {
         config.tableId = tableId;
     }

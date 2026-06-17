@@ -20,17 +20,29 @@ async function ensureCacheDir() {
   }
 }
 
+function decodeTokenPart(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch (_) {
+    return value;
+  }
+}
+
 function parsePageToken(pageToken) {
   if (!pageToken || typeof pageToken !== 'string') return null;
-  const match = pageToken.match(/^([a-zA-Z0-9_-]+):(\d+)$/);
+  const match = pageToken.match(/^([a-zA-Z0-9_-]+):(\d+)(?::(.+))?$/);
   if (!match) return null;
   return {
     taskId: match[1],
     offset: parseInt(match[2], 10),
+    tableId: match[3] ? decodeTokenPart(match[3]) : '',
   };
 }
 
-function buildPageToken(taskId, offset) {
+function buildPageToken(taskId, offset, tableId = '') {
+  if (tableId && tableId !== 'unknown') {
+    return `${taskId}:${offset}:${encodeURIComponent(tableId)}`;
+  }
   return `${taskId}:${offset}`;
 }
 
