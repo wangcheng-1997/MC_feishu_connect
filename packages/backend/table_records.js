@@ -6,7 +6,7 @@ const {
   parsePageToken,
   buildQuerySignature,
   createTask,
-  loadTask,
+  getTaskPage,
   cleanupExpiredTasks,
   getTaskFileSize,
 } = require('./maxcompute_file_cache.js');
@@ -63,13 +63,23 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
     if (tokenInfo) {
       const pageOffset = tokenInfo.offset;
       let taskId = tokenInfo.taskId;
-      let rows = null;
+      let pageRows = null;
+      let totalRows = 0;
+      let hasMore = false;
       logTaskStage('token_parsed', withTrace({ taskId, pageOffset }));
       try {
-        const task = await loadTask(tokenInfo.taskId, { querySignature, touch: false });
-        rows = Array.isArray(task.rows) ? task.rows : null;
-        const expiresInMs = task.expiresAt ? Math.max(task.expiresAt - Date.now(), 0) : '';
-        logTaskStage('cache_lookup_done', withTrace({ taskId, pageOffset, cacheHit: Boolean(rows), total: rows ? rows.length : 0, expiresInMs }));
+        const { payload, page } = await getTaskPage(tokenInfo.taskId, pageOffset, querySignature, { pageSize: batchSize });
+        if (payload.pageSize && payload.pageSize !== batchSize) {
+          throw new Error('Cache page size mismatch');
+        }
+        if (!page || !Array.isArray(page.rows)) {
+          throw new Error('Cache page missing');
+        }
+        pageRows = page.rows;
+        totalRows = payload.total || 0;
+        hasMore = Boolean(page.hasMore);
+        const expiresInMs = payload.expiresAt ? Math.max(payload.expiresAt - Date.now(), 0) : '';
+        logTaskStage('cache_lookup_done', withTrace({ taskId, pageOffset, cacheHit: true, pageSize: pageRows.length, total: totalRows, expiresInMs }));
       } catch (cacheError) {
         console.warn(`[cacheMiss] ${cacheError.message}, recreate task for offset=${pageOffset}`);
         let allRows;
@@ -81,16 +91,16 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
           allRows = await client.getTableData(config.tableName, null, 0);
         }
         logTaskStage('source_fetch_done', withTrace({ taskId: 'recreate', pageOffset: 0, fetched: Array.isArray(allRows) ? allRows.length : 0, durationMs: Date.now() - fetchStart }));
-        const recreatedTask = await createTask(querySignature, allRows);
+        const recreatedTask = await createTask(querySignature, allRows, { pageSize: batchSize });
         taskId = recreatedTask.taskId;
-        rows = Array.isArray(recreatedTask.rows) ? recreatedTask.rows : [];
+        totalRows = Array.isArray(allRows) ? allRows.length : 0;
+        pageRows = Array.isArray(allRows) ? allRows.slice(pageOffset, pageOffset + batchSize) : [];
+        hasMore = pageOffset + batchSize < totalRows;
         const cacheFileBytes = await getTaskFileSize(taskId).catch(() => 0);
-        logTaskStage('task_recreated', withTrace({ oldTaskId: tokenInfo.taskId, taskId, pageOffset, reason: cacheError.message, total: rows.length, cacheFileBytes }));
+        logTaskStage('task_recreated', withTrace({ oldTaskId: tokenInfo.taskId, taskId, pageOffset, reason: cacheError.message, total: totalRows, cacheFileBytes }));
       }
 
-      if (rows) {
-        const pageRows = rows.slice(pageOffset, pageOffset + batchSize);
-        const hasMore = pageOffset + batchSize < rows.length;
+      if (pageRows) {
         const nextPageToken = hasMore ? buildPageToken(taskId, pageOffset + batchSize) : '';
         logTaskStage('return_cached_page', withTrace({
           taskId,
@@ -115,8 +125,8 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
       allRows = await client.getTableData(config.tableName, null, 0);
     }
     logTaskStage('source_fetch_done', withTrace({ taskId: 'new', pageOffset: 0, fetched: Array.isArray(allRows) ? allRows.length : 0, durationMs: Date.now() - fetchStart }));
-    const task = await createTask(querySignature, allRows);
-    const rows = Array.isArray(task.rows) ? task.rows : [];
+    const task = await createTask(querySignature, allRows, { pageSize: batchSize });
+    const rows = Array.isArray(allRows) ? allRows : [];
     const pageRows = rows.slice(pageOffset, pageOffset + batchSize);
     const hasMore = pageOffset + batchSize < rows.length;
     const cacheFileBytes = await getTaskFileSize(task.taskId).catch(() => 0);

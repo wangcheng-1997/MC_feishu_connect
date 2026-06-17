@@ -10,6 +10,10 @@ function buildCacheFilePath(taskId) {
   return path.join(CACHE_DIR, `${taskId}.json`);
 }
 
+function buildPageFilePath(taskId, offset) {
+  return path.join(CACHE_DIR, `${taskId}_${offset}.page`);
+}
+
 async function ensureCacheDir() {
   if (!fs.existsSync(CACHE_DIR)) {
     await fsp.mkdir(CACHE_DIR, { recursive: true });
@@ -37,6 +41,30 @@ async function saveTask(taskId, payload) {
   return filePath;
 }
 
+async function saveTaskPage(taskId, offset, rows, hasMore) {
+  await ensureCacheDir();
+  const pagePath = buildPageFilePath(taskId, offset);
+  const payload = {
+    taskId,
+    offset,
+    rows: Array.isArray(rows) ? rows : [],
+    hasMore: Boolean(hasMore),
+    updatedAt: Date.now(),
+  };
+  await fsp.writeFile(pagePath, JSON.stringify(payload), 'utf8');
+  return payload;
+}
+
+async function deleteTaskFiles(taskId) {
+  await fsp.unlink(buildCacheFilePath(taskId)).catch(() => {});
+  const files = await fsp.readdir(CACHE_DIR).catch(() => []);
+  await Promise.all(
+    files
+      .filter((name) => name.startsWith(`${taskId}_`) && name.endsWith('.page'))
+      .map((name) => fsp.unlink(path.join(CACHE_DIR, name)).catch(() => {}))
+  );
+}
+
 function nextExpiry() {
   return Date.now() + CACHE_TTL_MS;
 }
@@ -51,18 +79,36 @@ function buildQuerySignature(config = {}) {
   return crypto.createHash('sha1').update(JSON.stringify(base)).digest('hex');
 }
 
-async function createTask(querySignature = '', dataRows = null) {
+async function createTask(querySignature = '', dataRows = null, options = {}) {
   const taskId = (crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex')).replace(/-/g, '');
   const now = Date.now();
+  const rows = Array.isArray(dataRows) ? dataRows : null;
+  const pageSize = Math.max(parseInt(options.pageSize, 10) || 0, 0);
   const payload = {
     taskId,
     createdAt: now,
     expiresAt: nextExpiry(),
     querySignature,
-    total: Array.isArray(dataRows) ? dataRows.length : 0,
-    rows: Array.isArray(dataRows) ? dataRows : null,
+    total: rows ? rows.length : 0,
+    pageSize: pageSize || null,
+    rows: rows && pageSize ? null : rows,
     pages: {},
   };
+
+  if (rows && pageSize) {
+    for (let offset = 0; offset < rows.length; offset += pageSize) {
+      const pageRows = rows.slice(offset, offset + pageSize);
+      const hasMore = offset + pageSize < rows.length;
+      await saveTaskPage(taskId, offset, pageRows, hasMore);
+      payload.pages[String(offset)] = {
+        file: path.basename(buildPageFilePath(taskId, offset)),
+        count: pageRows.length,
+        hasMore,
+        updatedAt: Date.now(),
+      };
+    }
+  }
+
   await saveTask(taskId, payload);
   return payload;
 }
@@ -75,7 +121,7 @@ async function loadTask(taskId, options = {}) {
     throw new Error('Invalid cache payload');
   }
   if (payload.expiresAt <= Date.now()) {
-    await fsp.unlink(filePath).catch(() => {});
+    await deleteTaskFiles(taskId);
     throw new Error('Cache expired');
   }
   if (options.querySignature && payload.querySignature && options.querySignature !== payload.querySignature) {
@@ -88,12 +134,50 @@ async function loadTask(taskId, options = {}) {
   return payload;
 }
 
-async function getTaskPage(taskId, offset, querySignature = '') {
-  const payload = await loadTask(taskId, { querySignature, touch: true });
+async function getTaskPage(taskId, offset, querySignature = '', options = {}) {
+  const payload = await loadTask(taskId, { querySignature, touch: false });
+  const shouldTouchMetadata = !Array.isArray(payload.rows);
   const page = payload.pages && payload.pages[String(offset)];
+  if (page && page.file) {
+    const pagePayload = JSON.parse(await fsp.readFile(buildPageFilePath(taskId, offset), 'utf8'));
+    if (shouldTouchMetadata) {
+      payload.expiresAt = nextExpiry();
+      await saveTask(taskId, payload);
+    }
+    return {
+      payload,
+      page: {
+        rows: Array.isArray(pagePayload.rows) ? pagePayload.rows : [],
+        hasMore: Boolean(pagePayload.hasMore),
+        updatedAt: pagePayload.updatedAt,
+      },
+    };
+  }
+  if (page && Array.isArray(page.rows)) {
+    if (shouldTouchMetadata) {
+      payload.expiresAt = nextExpiry();
+      await saveTask(taskId, payload);
+    }
+    return {
+      payload,
+      page,
+    };
+  }
+  if (Array.isArray(payload.rows)) {
+    const pageSize = Math.max(parseInt(options.pageSize || payload.pageSize, 10) || 1000, 1);
+    const rows = payload.rows.slice(offset, offset + pageSize);
+    return {
+      payload,
+      page: {
+        rows,
+        hasMore: offset + pageSize < payload.rows.length,
+        updatedAt: payload.createdAt,
+      },
+    };
+  }
   return {
     payload,
-    page: page || null,
+    page: null,
   };
 }
 
@@ -102,10 +186,12 @@ async function setTaskPage(taskId, offset, rows, hasMore) {
   if (!payload.pages || typeof payload.pages !== 'object') {
     payload.pages = {};
   }
+  const pagePayload = await saveTaskPage(taskId, offset, rows, hasMore);
   payload.pages[String(offset)] = {
-    rows: Array.isArray(rows) ? rows : [],
+    file: path.basename(buildPageFilePath(taskId, offset)),
+    count: pagePayload.rows.length,
     hasMore: Boolean(hasMore),
-    updatedAt: Date.now(),
+    updatedAt: pagePayload.updatedAt,
   };
   payload.expiresAt = nextExpiry();
   await saveTask(taskId, payload);
@@ -124,9 +210,11 @@ async function cleanupExpiredTasks() {
           const content = await fsp.readFile(filePath, 'utf8');
           const payload = JSON.parse(content);
           if (!payload || !payload.expiresAt || payload.expiresAt <= Date.now()) {
-            await fsp.unlink(filePath);
+            await deleteTaskFiles(payload?.taskId || path.basename(name, '.json'));
           }
-        } catch (_) {}
+        } catch (_) {
+          await fsp.unlink(filePath).catch(() => {});
+        }
       })
   );
 }
