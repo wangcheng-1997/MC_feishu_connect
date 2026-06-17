@@ -52,11 +52,19 @@ function formatLogValue(value) {
     return String(value).replace(/\s+/g, "_");
 }
 
-function logRecordsEvent(event, details = {}, level = "log") {
+function logScopedEvent(scope, event, details = {}, level = "log") {
     const parts = Object.entries(details)
         .filter(([, value]) => value !== undefined && value !== null && value !== "")
         .map(([key, value]) => `${key}=${formatLogValue(value)}`);
-    console[level](`[records] event=${event}${parts.length ? ` ${parts.join(" ")}` : ""}`);
+    console[level](`[${scope}] event=${event}${parts.length ? ` ${parts.join(" ")}` : ""}`);
+}
+
+function logRecordsEvent(event, details = {}, level = "log") {
+    logScopedEvent("records", event, details, level);
+}
+
+function logTableMetaEvent(event, details = {}, level = "log") {
+    logScopedEvent("table_meta", event, details, level);
 }
 
 // 跨域支持
@@ -240,6 +248,8 @@ function normalizeDataSourceConfig(body) {
  * 支持 MaxCompute 和 SQL Server
  */
 app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
+    const startedAt = Date.now();
+    const traceId = `meta_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
     try {
         let data;
 
@@ -252,8 +262,11 @@ app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
 
         // 判断数据源类型
         if (config.sqlserver) {
+            logTableMetaEvent("source_execute", { traceId, source: "sqlserver" });
             data = await getSqlServerTableMeta(config.sqlserver);
         } else if (config.maxcompute) {
+            config.maxcompute.traceId = config.maxcompute.traceId || traceId;
+            logTableMetaEvent("source_execute", { traceId, source: "maxcompute" });
             data = await getTableMeta(config);
         } else {
             const err = new Error("Missing data source config: sqlserver or maxcompute");
@@ -266,9 +279,11 @@ app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
             message: "获取表元数据成功",
             data: data,
         };
+        const fieldCount = Array.isArray(data?.fields) ? data.fields.length : 0;
+        logTableMetaEvent("done", { traceId, fieldCount, durationMs: Date.now() - startedAt });
         res.status(200).json(result);
     } catch (error) {
-        console.error("获取表元数据失败:", error.message);
+        logTableMetaEvent("failed", { traceId, durationMs: Date.now() - startedAt, message: error.message }, "error");
         res.status(error.statusCode || 500).json({
             code: 500,
             message: "获取表元数据失败: " + error.message,

@@ -380,6 +380,14 @@ class MaxComputeClient {
     return finalSQL;
   }
 
+  _buildSchemaProbeSQL(sql) {
+    const finalSQL = String(sql || '').trim().replace(/;+\s*$/, '');
+    if (/\blimit\s+\d+(\s+offset\s+\d+)?\s*$/i.test(finalSQL)) {
+      return finalSQL.replace(/\blimit\s+\d+(\s+offset\s+\d+)?\s*$/i, 'LIMIT 0 OFFSET 0');
+    }
+    return `${finalSQL} LIMIT 0 OFFSET 0`;
+  }
+
   async executeSQL(sql, limit = null, offset = 0) {
     const finalSQL = this._buildLimitedSQL(sql, limit, offset);
     const result = await runPyOdps('execute_sql', { ...this, sql: finalSQL, limit, offset });
@@ -402,8 +410,8 @@ class MaxComputeClient {
   }
 
   async getQueryMeta(sql) {
-    const finalSQL = this._buildLimitedSQL(sql, 1, 0);
-    const result = await runPyOdps('execute_sql', { ...this, sql: finalSQL, limit: 1, offset: 0 });
+    const finalSQL = this._buildSchemaProbeSQL(sql);
+    const result = await runPyOdps('execute_sql', { ...this, sql: finalSQL, limit: 0, offset: 0 });
     if (!result.success) throw new Error(result.message || '获取 SQL 字段失败');
     const columns = Array.isArray(result.columns) ? result.columns : [];
     if (columns.length === 0) {
