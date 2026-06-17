@@ -6,7 +6,13 @@ const DataSourceFactory = require("./data_source_factory.js");
 const { judgeEncryptSignValid, setSecretKey } = require("./request_sign.js");
 const { getTableMeta } = require("./table_meta_fixed.js");
 const { getTableRecords } = require("./table_records.js");
-const { createSyncStageLogger, logAppEvent, logSyncFailure } = require("./sync_logger.js");
+const {
+    createSyncStageLogger,
+    isDetailedSyncLogging,
+    logAppEvent,
+    logSyncEvent,
+    logSyncFailure,
+} = require("./sync_logger.js");
 const {
     getSqlServerTableMeta,
     getSqlServerTableRecords,
@@ -345,11 +351,11 @@ app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
 
         // 判断数据源类型
         if (config.sqlserver) {
-            logTableMetaEvent("source_execute", metaContext);
+            logTableMetaEvent("source_execute", metaContext, "debug");
             data = await getSqlServerTableMeta(config.sqlserver);
         } else if (config.maxcompute) {
             config.maxcompute.traceId = config.maxcompute.traceId || traceId;
-            logTableMetaEvent("source_execute", metaContext);
+            logTableMetaEvent("source_execute", metaContext, "debug");
             data = await getTableMeta(config);
         } else {
             const err = new Error("Missing data source config: sqlserver or maxcompute");
@@ -409,8 +415,8 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
             if (!tokenStr) return 0;
             if (tokenStr.includes(":")) {
                 const parts = tokenStr.split(":");
-                const tail = parts[parts.length - 1];
-                const parsed = parseInt(tail, 10);
+                const numericPart = parts.slice().reverse().find((part) => /^\d+$/.test(part));
+                const parsed = parseInt(numericPart || "", 10);
                 return Number.isFinite(parsed) ? parsed : 0;
             }
             const parsed = parseInt(tokenStr, 10);
@@ -427,8 +433,21 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         // 判断数据源类型
         if (config.sqlserver) {
             // SQL Server 数据源
-            const logStage = createSyncStageLogger(syncContext, 3);
-            logStage(1, "request", { offset, limit, hasPageToken: Boolean(config.pageToken || config.nextPageToken) });
+            const detailedLogging = isDetailedSyncLogging();
+            const logStage = detailedLogging ? createSyncStageLogger(syncContext, 3) : null;
+            if (detailedLogging) {
+                logStage(1, "request", { offset, limit, hasPageToken: Boolean(config.pageToken || config.nextPageToken) });
+            } else {
+                logSyncEvent(syncContext, {
+                    stage: "start",
+                    stageName: "source_fetch_start",
+                    stageMs: 0,
+                    elapsedMs: 0,
+                    offset,
+                    limit,
+                    hasPageToken: Boolean(config.pageToken || config.nextPageToken),
+                });
+            }
             data = await getSqlServerTableRecords(
                 config.sqlserver,
                 config.fields,
@@ -436,13 +455,29 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
                 limit
             );
             const pageSize = Array.isArray(data?.records) ? data.records.length : 0;
-            logStage(2, "source_fetch", { offset, limit, pageSize, hasMore: Boolean(data?.hasMore) });
-            logStage(3, "done", {
-                pageSize,
-                hasMore: Boolean(data?.hasMore),
-                nextPageToken: data?.nextPageToken || "",
-                totalDurationMs: Date.now() - startedAt,
-            });
+            const hasMore = Boolean(data?.hasMore);
+            if (detailedLogging) {
+                logStage(2, "source_fetch", { offset, limit, pageSize, hasMore });
+                logStage(3, "done", {
+                    pageSize,
+                    hasMore,
+                    nextPageToken: data?.nextPageToken || "",
+                    totalDurationMs: Date.now() - startedAt,
+                });
+            } else {
+                const elapsedMs = Date.now() - startedAt;
+                logSyncEvent(syncContext, {
+                    stage: hasMore ? "page" : "done",
+                    stageName: "source_fetch",
+                    stageMs: elapsedMs,
+                    elapsedMs,
+                    offset,
+                    limit,
+                    pageSize,
+                    hasMore,
+                    nextPageToken: data?.nextPageToken || "",
+                });
+            }
         } else if (config.maxcompute) {
             // MaxCompute 数据源（默认）
             // 构建配置，确保分页参数正确传递

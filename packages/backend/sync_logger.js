@@ -223,8 +223,14 @@ function isDebugEnabled() {
   return shouldLog('debug');
 }
 
+function isDetailedSyncLogging() {
+  const detail = String(process.env.SYNC_LOG_DETAIL || '').toLowerCase();
+  return detail === 'stage' || detail === 'full' || isDebugEnabled();
+}
+
 module.exports = {
   createSyncStageLogger,
+  isDetailedSyncLogging,
   isDebugEnabled,
   logAppEvent,
   logSyncEvent,

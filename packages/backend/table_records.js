@@ -1,7 +1,12 @@
 const { MaxComputeClient } = require('./maxcompute_client_fixed.js');
 const { generateTableMeta, generateTableRecords } = require('./maxcompute_adapter.js');
 const { getSqlServerTableRecords } = require('./sqlserver_handler.js');
-const { createSyncStageLogger, logSyncFailure } = require('./sync_logger.js');
+const {
+  createSyncStageLogger,
+  isDetailedSyncLogging,
+  logSyncEvent,
+  logSyncFailure,
+} = require('./sync_logger.js');
 const {
   CACHE_DIR,
   buildPageToken,
@@ -54,6 +59,12 @@ function buildFieldsFromColumns(config, columns) {
   return generateTableMeta(config.tableName || 'custom_query', columns, config.primaryField).fields;
 }
 
+function buildPageStage(pageOffset, pageSize, totalRows) {
+  const pageIndex = Math.floor((parseInt(pageOffset, 10) || 0) / pageSize) + 1;
+  const totalPages = totalRows > 0 ? Math.max(Math.ceil(totalRows / pageSize), 1) : '?';
+  return `${pageIndex}/${totalPages}`;
+}
+
 function buildSourceSQL(config) {
   if (config.sql) {
     return config.sql;
@@ -94,19 +105,32 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
   const batchSize = Math.min(limit, 1000);
   const tokenInfo = parsePageToken(pageToken);
   const syncContext = buildMaxComputeSyncContext(config, traceId, tokenInfo);
-  const logStage = createSyncStageLogger(syncContext, tokenInfo ? 4 : 3);
+  const detailedLogging = isDetailedSyncLogging();
+  const logStage = detailedLogging ? createSyncStageLogger(syncContext, tokenInfo ? 4 : 3) : null;
 
   try {
     const client = new MaxComputeClient(config);
     let normalizedFields = hasFields(fields) ? fields : null;
     const querySignature = buildQuerySignature(config);
 
-    logStage(1, 'request', {
-      offset,
-      limit,
-      pageSize: batchSize,
-      hasPageToken: Boolean(pageToken),
-    });
+    if (detailedLogging) {
+      logStage(1, 'request', {
+        offset,
+        limit,
+        pageSize: batchSize,
+        hasPageToken: Boolean(pageToken),
+      });
+    } else if (!tokenInfo) {
+      logSyncEvent(syncContext, {
+        stage: 'start',
+        stageName: 'source_fetch_start',
+        stageMs: 0,
+        elapsedMs: 0,
+        offset,
+        limit,
+        pageSize: batchSize,
+      });
+    }
     await cleanupExpiredTasks();
 
     if (tokenInfo) {
@@ -117,6 +141,9 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
       let hasMore = false;
       let cachePayload = null;
       let rebuiltCache = false;
+      let expiresInMs = '';
+      let rebuildTiming = null;
+      let cacheFileBytes = '';
 
       try {
         const { payload, page } = await getTaskPage(tokenInfo.taskId, pageOffset, querySignature, { pageSize: batchSize });
@@ -130,35 +157,42 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
         pageRows = page.rows;
         totalRows = payload.total || 0;
         hasMore = Boolean(page.hasMore);
-        const expiresInMs = payload.expiresAt ? Math.max(payload.expiresAt - Date.now(), 0) : '';
-        logStage(2, 'cache_hit', {
-          taskId,
-          pageOffset,
-          pageSize: pageRows.length,
-          total: totalRows,
-          expiresInMs,
-        });
+        expiresInMs = payload.expiresAt ? Math.max(payload.expiresAt - Date.now(), 0) : '';
+        if (detailedLogging) {
+          logStage(2, 'cache_hit', {
+            taskId,
+            pageOffset,
+            pageSize: pageRows.length,
+            total: totalRows,
+            expiresInMs,
+          });
+        }
       } catch (cacheError) {
         rebuiltCache = true;
-        logStage(2, 'cache_miss', { taskId, pageOffset, reason: cacheError.message });
+        if (detailedLogging) {
+          logStage(2, 'cache_miss', { taskId, pageOffset, reason: cacheError.message });
+        }
         const cachedResult = await executeSourceToPageCache(client, config, querySignature, batchSize);
         taskId = cachedResult.taskId;
         totalRows = cachedResult.total || 0;
+        rebuildTiming = cachedResult.timing || null;
         const { payload, page } = await getTaskPage(taskId, pageOffset, querySignature, { pageSize: batchSize });
         cachePayload = payload;
         pageRows = page && Array.isArray(page.rows) ? page.rows : [];
         hasMore = page ? Boolean(page.hasMore) : false;
-        const cacheFileBytes = await getTaskFileSize(taskId).catch(() => 0);
-        logStage(3, 'source_rebuild', {
-          taskId,
-          pageOffset,
-          total: totalRows,
-          pageSize: pageRows.length,
-          executeMs: cachedResult.timing?.executeMs,
-          waitMs: cachedResult.timing?.waitMs,
-          readWriteMs: cachedResult.timing?.readWriteMs,
-          cacheFileBytes,
-        });
+        cacheFileBytes = await getTaskFileSize(taskId).catch(() => 0);
+        if (detailedLogging) {
+          logStage(3, 'source_rebuild', {
+            taskId,
+            pageOffset,
+            total: totalRows,
+            pageSize: pageRows.length,
+            executeMs: cachedResult.timing?.executeMs,
+            waitMs: cachedResult.timing?.waitMs,
+            readWriteMs: cachedResult.timing?.readWriteMs,
+            cacheFileBytes,
+          });
+        }
       }
 
       if (pageRows) {
@@ -181,10 +215,32 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
           nextOffset: hasMore ? pageOffset + batchSize : '',
           totalDurationMs: Date.now() - startAt,
         };
-        if (!rebuiltCache) {
+        if (detailedLogging && !rebuiltCache) {
           logStage(3, 'build_records', { pageSize: pageRows.length, fieldSource });
         }
-        logStage(4, 'done', doneDetails);
+        if (detailedLogging) {
+          logStage(4, 'done', doneDetails);
+        } else {
+          const elapsedMs = Date.now() - startAt;
+          logSyncEvent(syncContext, {
+            stage: buildPageStage(pageOffset, batchSize, totalRows),
+            stageName: rebuiltCache ? 'source_rebuild' : 'cache_hit',
+            stageMs: elapsedMs,
+            elapsedMs,
+            taskId,
+            pageOffset,
+            pageSize: pageRows.length,
+            total: totalRows,
+            hasMore,
+            nextOffset: hasMore ? pageOffset + batchSize : '',
+            fieldSource,
+            expiresInMs,
+            executeMs: rebuildTiming?.executeMs,
+            waitMs: rebuildTiming?.waitMs,
+            readWriteMs: rebuildTiming?.readWriteMs,
+            cacheFileBytes,
+          });
+        }
         return generateTableRecords(pageRows, normalizedFields, hasMore, nextPageToken, pageOffset);
       }
       throw new Error('Invalid cache task data');
@@ -199,7 +255,7 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
     const pageRows = Array.isArray(cachedResult.data) ? cachedResult.data : [];
     const hasMore = Boolean(cachedResult.hasMore);
     const cacheFileBytes = await getTaskFileSize(taskId).catch(() => 0);
-    logStage(2, 'source_fetch', {
+    const sourceFetchDetails = {
       taskId,
       pageOffset,
       total: cachedResult.total || 0,
@@ -209,16 +265,33 @@ async function getTableRecordsFromMaxCompute(config, fields, offset = 0, limit =
       waitMs: cachedResult.timing?.waitMs,
       readWriteMs: cachedResult.timing?.readWriteMs,
       cacheFileBytes,
-    });
+    };
+    if (detailedLogging) {
+      logStage(2, 'source_fetch', sourceFetchDetails);
+    }
     const nextPageToken = hasMore ? buildPageToken(taskId, pageOffset + batchSize, syncContext.tableId) : '';
-    logStage(3, 'done', {
+    const doneDetails = {
       taskId,
       pageOffset,
       pageSize: pageRows.length,
       hasMore,
       nextOffset: hasMore ? pageOffset + batchSize : '',
       totalDurationMs: Date.now() - startAt,
-    });
+    };
+    if (detailedLogging) {
+      logStage(3, 'done', doneDetails);
+    } else {
+      const elapsedMs = Date.now() - startAt;
+      logSyncEvent(syncContext, {
+        stage: buildPageStage(pageOffset, batchSize, cachedResult.total || pageRows.length),
+        stageName: 'source_fetch',
+        stageMs: elapsedMs,
+        elapsedMs,
+        nextOffset: hasMore ? pageOffset + batchSize : '',
+        fieldSource: hasFields(fields) ? 'request_fields' : 'cache_columns',
+        ...sourceFetchDetails,
+      });
+    }
     return generateTableRecords(pageRows, normalizedFields, hasMore, nextPageToken, pageOffset);
   } catch (error) {
     logSyncFailure(syncContext, {
