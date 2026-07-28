@@ -31,6 +31,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Runtime data
+packages/backend/.sync_cache/
+packages/backend/.sync_stats/
+
 # Testing
 coverage/
 

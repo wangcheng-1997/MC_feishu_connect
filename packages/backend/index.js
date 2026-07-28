@@ -6,6 +6,7 @@ const DataSourceFactory = require("./data_source_factory.js");
 const { judgeEncryptSignValid, setSecretKey } = require("./request_sign.js");
 const { getTableMeta } = require("./table_meta_fixed.js");
 const { getTableRecords } = require("./table_records.js");
+const { getSyncStats, recordSyncStat } = require("./sync_stats.js");
 const {
     createSyncStageLogger,
     isDetailedSyncLogging,
@@ -135,6 +136,42 @@ function buildSyncContext(config, traceId) {
             ? firstNonEmpty(sourceConfig.tableName, "custom_query")
             : firstNonEmpty(sourceConfig.tableName, "unknown"),
     };
+}
+
+function getHeader(req, name) {
+    return req.headers[String(name).toLowerCase()] || "";
+}
+
+function buildRequestSource(req) {
+    return {
+        hasBaseSignature: Boolean(getHeader(req, "x-base-signature")),
+        baseRequestTimestamp: firstNonEmpty(getHeader(req, "x-base-request-timestamp"), ""),
+        origin: firstNonEmpty(getHeader(req, "origin"), ""),
+        referer: firstNonEmpty(getHeader(req, "referer"), ""),
+        userAgent: firstNonEmpty(getHeader(req, "user-agent"), ""),
+    };
+}
+
+function statRecord(input) {
+    recordSyncStat(input).catch((error) => {
+        logAppEvent("sync_stats", "write_failed", { message: error.message }, "warn");
+    });
+}
+
+function validateStatsRequest(req, res, next) {
+    const token = process.env.SYNC_STATS_TOKEN;
+    if (!token) {
+        next();
+        return;
+    }
+    const auth = getHeader(req, "authorization");
+    const bearerToken = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+    const requestToken = firstNonEmpty(getHeader(req, "x-sync-stats-token"), bearerToken, req.query.token);
+    if (requestToken !== token) {
+        res.status(401).json({ code: 401, message: "统计接口未授权" });
+        return;
+    }
+    next();
 }
 
 // 跨域支持
@@ -338,16 +375,18 @@ function normalizeDataSourceConfig(body) {
 app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
     const startedAt = Date.now();
     const traceId = `meta_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    let config = null;
+    let metaContext = { traceId, tableId: "unknown" };
     try {
         let data;
 
-        const config = normalizeDataSourceConfig(req.body);
+        config = normalizeDataSourceConfig(req.body);
         if (!config) {
             const err = new Error("Missing data source config: sqlserver or maxcompute");
             err.statusCode = 400;
             throw err;
         }
-        const metaContext = buildSyncContext(config, traceId);
+        metaContext = buildSyncContext(config, traceId);
 
         // 判断数据源类型
         if (config.sqlserver) {
@@ -369,10 +408,31 @@ app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
             data: data,
         };
         const fieldCount = Array.isArray(data?.fields) ? data.fields.length : 0;
-        logTableMetaEvent("done", { ...metaContext, fieldCount, durationMs: Date.now() - startedAt });
+        const durationMs = Date.now() - startedAt;
+        logTableMetaEvent("done", { ...metaContext, fieldCount, durationMs });
+        statRecord({
+            endpoint: "table_meta",
+            status: "success",
+            traceId,
+            context: metaContext,
+            config,
+            durationMs,
+            requestSource: buildRequestSource(req),
+        });
         res.status(200).json(result);
     } catch (error) {
-        logTableMetaEvent("failed", { traceId, durationMs: Date.now() - startedAt, message: error.message }, "error");
+        const durationMs = Date.now() - startedAt;
+        logTableMetaEvent("failed", { traceId, durationMs, message: error.message }, "error");
+        statRecord({
+            endpoint: "table_meta",
+            status: "failed",
+            traceId,
+            context: metaContext,
+            config,
+            durationMs,
+            errorMessage: error.message,
+            requestSource: buildRequestSource(req),
+        });
         res.status(error.statusCode || 500).json({
             code: 500,
             message: "获取表元数据失败: " + error.message,
@@ -390,10 +450,14 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
     const startedAt = Date.now();
     const traceId = `rec_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
     let syncContext = { traceId, tableId: "unknown" };
+    let config = null;
+    let offset = 0;
+    let limit = 1000;
+    let hasPageToken = false;
     try {
         let data;
 
-        const config = normalizeDataSourceConfig(req.body);
+        config = normalizeDataSourceConfig(req.body);
         if (!config) {
             const err = new Error("Missing data source config: sqlserver or maxcompute");
             err.statusCode = 400;
@@ -402,9 +466,9 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
 
         // 获取分页参数（用于分批写入）
         // 飞书多维表格会使用 pageToken 作为下一次请求的 offset 参数
-        let offset = parseInt(config.offset) || 0;
+        offset = parseInt(config.offset) || 0;
         // limit 优先级：顶层 limit > maxcompute.limit/sqlserver.limit > 默认 1000
-        let limit = parseInt(config.limit) || parseInt(config.maxcompute?.limit) || parseInt(config.sqlserver?.limit) || 1000;
+        limit = parseInt(config.limit) || parseInt(config.maxcompute?.limit) || parseInt(config.sqlserver?.limit) || 1000;
         limit = Math.min(limit, 1000); // 最大 1000
         
         // 如果有 pageToken 或 nextPageToken，则使用它作为 offset
@@ -428,6 +492,7 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
         } else if (config.nextPageToken) {
             offset = parseTokenOffset(config.nextPageToken);
         }
+        hasPageToken = Boolean(config.pageToken || config.nextPageToken);
         syncContext = buildSyncContext(config, traceId);
 
         // 判断数据源类型
@@ -507,12 +572,60 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
             message: "获取记录数据成功",
             data: data,
         };
+        const durationMs = Date.now() - startedAt;
+        statRecord({
+            endpoint: "records",
+            status: "success",
+            traceId,
+            context: syncContext,
+            config,
+            durationMs,
+            offset,
+            limit,
+            hasPageToken,
+            pageSize: Array.isArray(data?.records) ? data.records.length : 0,
+            requestSource: buildRequestSource(req),
+        });
         res.status(200).json(result);
     } catch (error) {
-        logSyncFailure(syncContext, { totalDurationMs: Date.now() - startedAt, message: error.message });
+        const durationMs = Date.now() - startedAt;
+        logSyncFailure(syncContext, { totalDurationMs: durationMs, message: error.message });
+        statRecord({
+            endpoint: "records",
+            status: "failed",
+            traceId,
+            context: syncContext,
+            config,
+            durationMs,
+            offset,
+            limit,
+            hasPageToken,
+            errorMessage: error.message,
+            requestSource: buildRequestSource(req),
+        });
         res.status(error.statusCode || 500).json({
             code: 500,
             message: "获取记录数据失败: " + error.message,
+            data: null,
+        });
+    }
+});
+
+app.get("/api/sync_stats", validateStatsRequest, async (req, res) => {
+    try {
+        const stats = await getSyncStats({
+            days: req.query.days,
+            date: req.query.date,
+        });
+        res.status(200).json({
+            code: 0,
+            message: "获取同步统计成功",
+            data: stats,
+        });
+    } catch (error) {
+        res.status(500).json({
+            code: 500,
+            message: "获取同步统计失败: " + error.message,
             data: null,
         });
     }
