@@ -7,6 +7,10 @@ const DEFAULT_TIME_ZONE = 'Asia/Shanghai';
 const DEFAULT_DAYS = 7;
 const MAX_DAYS = 90;
 const MAX_PREVIEW_LENGTH = 180;
+const MAX_SHAPE_DEPTH = 5;
+const MAX_SHAPE_KEYS = 30;
+const DEFAULT_SHAPE_LIMIT = 50;
+const MAX_SHAPE_LIMIT = 500;
 
 let writeQueue = Promise.resolve();
 
@@ -66,6 +70,10 @@ async function ensureStatsDir() {
 
 function buildStatsPath(dateKey) {
   return path.join(getStatsDir(), `${dateKey}.json`);
+}
+
+function buildUnknownShapePath(dateKey) {
+  return path.join(getStatsDir(), `unknown_request_shapes-${dateKey}.jsonl`);
 }
 
 function createEmptyDailyStats(dateKey) {
@@ -154,6 +162,128 @@ function hashText(value) {
 
 function normalizeSql(sql) {
   return normalizeText(sql, 4000);
+}
+
+function isSensitiveKey(key) {
+  const normalized = String(key || '').toLowerCase();
+  return /(access|authorization|cookie|password|secret|signature|token|sql|query)/.test(normalized);
+}
+
+function getCandidateKind(key) {
+  const normalized = String(key || '').toLowerCase().replace(/[_-]/g, '');
+  if (normalized === 'tableid' || normalized === 'basetableid' || normalized === 'bitabletableid') return 'tableId';
+  if (normalized === 'baseid' || normalized === 'bitableid') return 'baseId';
+  if (normalized === 'viewid') return 'viewId';
+  if (normalized === 'apptoken') return 'appToken';
+  if (normalized === 'tenantkey') return 'tenantKey';
+  return '';
+}
+
+function getValueType(value) {
+  if (Array.isArray(value)) return 'array';
+  if (value === null) return 'null';
+  return typeof value;
+}
+
+function extractCandidateFields(value, pathPrefix = '', depth = 0, candidates = [], seen = new Set()) {
+  if (value === undefined || value === null || depth > MAX_SHAPE_DEPTH) return candidates;
+  let target = value;
+  if (typeof target === 'string') {
+    const parsed = parseJsonForShape(target);
+    if (!parsed) return candidates;
+    target = parsed;
+  }
+  if (typeof target !== 'object' || seen.has(target)) return candidates;
+  seen.add(target);
+
+  if (Array.isArray(target)) {
+    target.slice(0, 3).forEach((item, index) => {
+      extractCandidateFields(item, `${pathPrefix}[${index}]`, depth + 1, candidates, seen);
+    });
+    return candidates;
+  }
+
+  for (const [key, item] of Object.entries(target)) {
+    const pathText = pathPrefix ? `${pathPrefix}.${key}` : key;
+    const kind = getCandidateKind(key);
+    if (kind) {
+      const sensitive = isSensitiveKey(key);
+      candidates.push({
+        path: pathText,
+        key,
+        kind,
+        type: getValueType(item),
+        redacted: sensitive,
+        valuePreview: sensitive ? '' : normalizeText(item, 120),
+      });
+    }
+    extractCandidateFields(item, pathText, depth + 1, candidates, seen);
+  }
+
+  return candidates;
+}
+
+function parseJsonForShape(value) {
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  if (!text || (text[0] !== '{' && text[0] !== '[')) return null;
+  try {
+    return JSON.parse(text);
+  } catch (_) {
+    return null;
+  }
+}
+
+function summarizeShape(value, depth = 0, seen = new Set()) {
+  if (value === undefined) return { type: 'undefined' };
+  if (value === null) return { type: 'null' };
+  if (depth > MAX_SHAPE_DEPTH) return { type: getValueType(value), truncated: 'max_depth' };
+
+  if (typeof value === 'string') {
+    const parsed = parseJsonForShape(value);
+    if (parsed) {
+      return {
+        type: 'json_string',
+        parsed: summarizeShape(parsed, depth + 1, seen),
+      };
+    }
+    return {
+      type: 'string',
+      length: value.length,
+    };
+  }
+
+  if (typeof value !== 'object') {
+    return { type: typeof value };
+  }
+
+  if (seen.has(value)) {
+    return { type: getValueType(value), circular: true };
+  }
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return {
+      type: 'array',
+      length: value.length,
+      first: value.length > 0 ? summarizeShape(value[0], depth + 1, seen) : null,
+    };
+  }
+
+  const entries = Object.entries(value);
+  const children = {};
+  for (const [key, item] of entries.slice(0, MAX_SHAPE_KEYS)) {
+    children[key] = isSensitiveKey(key)
+      ? { type: getValueType(item), redacted: true }
+      : summarizeShape(item, depth + 1, seen);
+  }
+  return {
+    type: 'object',
+    keys: entries.map(([key]) => key).slice(0, MAX_SHAPE_KEYS),
+    keyCount: entries.length,
+    truncated: entries.length > MAX_SHAPE_KEYS,
+    children,
+  };
 }
 
 function getSourceInfo(config = {}, context = {}) {
@@ -251,6 +381,31 @@ async function recordSyncStat(input = {}) {
   });
 }
 
+async function recordUnknownRequestShape(input = {}) {
+  const tableId = input.context?.tableId || input.config?.tableId || 'unknown';
+  if (tableId && tableId !== 'unknown') return;
+
+  const calledAt = new Date();
+  const dateKey = getDateKey(calledAt);
+  const sourceInfo = getSourceInfo(input.config, input.context);
+  const sample = {
+    ts: calledAt.toISOString(),
+    endpoint: input.endpoint || '',
+    traceId: input.traceId || input.context?.traceId || '',
+    source: sourceInfo.source,
+    objectType: sourceInfo.objectType,
+    objectName: sourceInfo.objectName,
+    requestSource: input.requestSource || {},
+    candidateFields: extractCandidateFields(input.requestBody || {}),
+    bodyShape: summarizeShape(input.requestBody || {}),
+  };
+
+  return enqueueWrite(async () => {
+    await ensureStatsDir();
+    await fsp.appendFile(buildUnknownShapePath(dateKey), `${JSON.stringify(sample)}\n`, 'utf8');
+  });
+}
+
 function mergeCounts(target, source) {
   const merged = { ...target };
   for (const [key, value] of Object.entries(source || {})) {
@@ -301,8 +456,43 @@ async function getSyncStats(options = {}) {
   };
 }
 
+async function getUnknownRequestShapes(options = {}) {
+  const dates = buildDateRange(options.date, options.days || 1);
+  const limit = Math.min(Math.max(parseInt(options.limit, 10) || DEFAULT_SHAPE_LIMIT, 1), MAX_SHAPE_LIMIT);
+  const samples = [];
+
+  for (const date of dates) {
+    const filePath = buildUnknownShapePath(date);
+    let content = '';
+    try {
+      content = await fsp.readFile(filePath, 'utf8');
+    } catch (error) {
+      if (!error || error.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+    if (!content) continue;
+    for (const line of content.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        samples.push(JSON.parse(line));
+      } catch (_) {}
+    }
+  }
+
+  return {
+    timeZone: getTimeZone(),
+    from: dates[0],
+    to: dates[dates.length - 1],
+    totalSamples: samples.length,
+    samples: samples.slice(-limit).reverse(),
+  };
+}
+
 module.exports = {
+  getUnknownRequestShapes,
   getSyncStats,
   recordSyncStat,
+  recordUnknownRequestShape,
   getDateKey,
 };

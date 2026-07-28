@@ -6,7 +6,12 @@ const DataSourceFactory = require("./data_source_factory.js");
 const { judgeEncryptSignValid, setSecretKey } = require("./request_sign.js");
 const { getTableMeta } = require("./table_meta_fixed.js");
 const { getTableRecords } = require("./table_records.js");
-const { getSyncStats, recordSyncStat } = require("./sync_stats.js");
+const {
+    getSyncStats,
+    getUnknownRequestShapes,
+    recordSyncStat,
+    recordUnknownRequestShape,
+} = require("./sync_stats.js");
 const {
     createSyncStageLogger,
     isDetailedSyncLogging,
@@ -156,6 +161,12 @@ function statRecord(input) {
     recordSyncStat(input).catch((error) => {
         logAppEvent("sync_stats", "write_failed", { message: error.message }, "warn");
     });
+    const shouldSampleUnknown = String(process.env.SYNC_STATS_SAMPLE_UNKNOWN || "true").toLowerCase() !== "false";
+    if (shouldSampleUnknown && (!input.context?.tableId || input.context.tableId === "unknown")) {
+        recordUnknownRequestShape(input).catch((error) => {
+            logAppEvent("sync_stats", "shape_sample_failed", { message: error.message }, "warn");
+        });
+    }
 }
 
 function validateStatsRequest(req, res, next) {
@@ -416,6 +427,7 @@ app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
             traceId,
             context: metaContext,
             config,
+            requestBody: req.body,
             durationMs,
             requestSource: buildRequestSource(req),
         });
@@ -429,6 +441,7 @@ app.post("/api/table_meta", validateRequestSignature, async (req, res) => {
             traceId,
             context: metaContext,
             config,
+            requestBody: req.body,
             durationMs,
             errorMessage: error.message,
             requestSource: buildRequestSource(req),
@@ -579,6 +592,7 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
             traceId,
             context: syncContext,
             config,
+            requestBody: req.body,
             durationMs,
             offset,
             limit,
@@ -596,6 +610,7 @@ app.post("/api/records", validateRequestSignature, async (req, res) => {
             traceId,
             context: syncContext,
             config,
+            requestBody: req.body,
             durationMs,
             offset,
             limit,
@@ -626,6 +641,27 @@ app.get("/api/sync_stats", validateStatsRequest, async (req, res) => {
         res.status(500).json({
             code: 500,
             message: "获取同步统计失败: " + error.message,
+            data: null,
+        });
+    }
+});
+
+app.get("/api/sync_stats/request_shapes", validateStatsRequest, async (req, res) => {
+    try {
+        const stats = await getUnknownRequestShapes({
+            days: req.query.days,
+            date: req.query.date,
+            limit: req.query.limit,
+        });
+        res.status(200).json({
+            code: 0,
+            message: "获取未知来源请求结构成功",
+            data: stats,
+        });
+    } catch (error) {
+        res.status(500).json({
+            code: 500,
+            message: "获取未知来源请求结构失败: " + error.message,
             data: null,
         });
     }
